@@ -4,379 +4,251 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ cf67ac48-3d1c-11ef-38d1-b957caba74a3
-using ModelingToolkit, Plots, OrdinaryDiffEq
+# ╔═╡ 86f2c937-f0f8-4fad-8607-e7b03fa1b46e
+using ModelingToolkit, OrdinaryDiffEq, Plots
 
-# ╔═╡ 69adf82c-4f09-4978-8386-c7706c0ee236
+# ╔═╡ ae4f5b02-ab7d-46e3-ac8c-8fd1fe63ae51
 using ModelingToolkit: t_nounits as t, D_nounits as D
 
-# ╔═╡ 199ec855-2a24-4eaa-8aa0-e9d87852b683
-using ModelingToolkitStandardLibrary.Electrical
+# ╔═╡ 1affc344-b742-4e0d-8a21-9dfd46055f98
+using LinearAlgebra
 
-# ╔═╡ db0e0376-e3c5-4c5e-80f2-62a5933ac485
-using ModelingToolkitStandardLibrary.Blocks: Constant
+# ╔═╡ a298cb80-38f8-4673-8f85-2c00046027a5
+using Symbolics
 
-# ╔═╡ 0d9f6bdf-3206-4529-bafc-27cb6ccfa1e3
+# ╔═╡ bd8835ff-6fad-427a-8042-47d5b1f08b43
 md"""
-# Introduction to Acausal Modeling via the RC Circuit
+# Understanding Difficult Differential-Algebraic Equations:
+#### DAE Index Reduction and Dummy Derivatives
 
-In this tutorial we will learn acausal modeling by learning how to build the RC Circuit model. It is highly recommended you see the slideshow first introducing acausal modeling, and then dive into this notebook!
+From the acausal modeling example we can see that the underlying foundation of our symbolic-numeric system is not ODEs but differential-algebraic equations, DAEs, or models which include both differential equations and equality relations. In some cases, these DAEs can be simplified down to just ODEs. However, that's not always the case, in some cases the equality relations need to be kept as part of the system definition. That's when we have a fundamental DAE.
+
+ModelingToolkit and DifferentialEquations.jl are made to be agnostic to the underlying form of the solve. If the system is a DAE, it will automatically generate a mass matrix representation of the DAE system, and then choose and appropriate solver via the automated solver algorithm. However, to better use the system, we need to understand a little bit about what the transformations are, what they are doing, and how to better interact with them.
+
+## Our DAE Test Case: Cartesian Pendulum
+
+For our test case for understanding how the DAE tooling works, we will use the cartesian pendulum problem. This is not middle school pendulum where you assumed sin(θ) is approximately θ when the angle is small, we want to represent the whole thing!
+
+The full set of equations is:
 """
 
-# ╔═╡ 7877b648-3d23-4aec-b8c6-7926bf4f18da
+# ╔═╡ 70b2cf2f-4f37-40e5-ac19-65f59598258e
+@parameters g=1 # normalize gravity to 1
+
+# ╔═╡ 058e5d29-1444-4e27-8c0e-401172fb3d75
+@variables x(t) y(t) [state_priority = 10] λ(t)
+
+# ╔═╡ ac027c64-4f39-46e1-950c-207f87ec72b6
+eqs = [D(D(x)) ~ λ * x
+       D(D(y)) ~ λ * y - g
+       0 ~ x^2 + y^2 - 1]
+
+# ╔═╡ 0058790e-8ef4-4bf0-ab8e-0a5a8b65914b
 md"""
+Notice that these are second order expressions of the harmonic oscillator in x and y, where there is an another state variable λ for the tension of the rod. Additionally there is an algebraic expression for the constraint on the rod living on the unit circle.
 
-## Part 1: Building the Acausal Model using Standard Library Components
-
-As a first step, we will learn how to build the RC circuit model using standard library components. To do this, we will first bring in the pre-defined components from the library:
+If we build the system, we will notice something immediately peculiar:
 """
 
-# ╔═╡ 45cee94a-8894-4def-aa21-fab6621097eb
+# ╔═╡ e5250569-ad65-45f5-8fd1-a153bbeeea40
+@mtkbuild pend = ODESystem(eqs, t)
+
+# ╔═╡ 564d8d51-882e-4319-8a10-691a7660ebb7
 md"""
-Next we will define a few constants:
+So that's the cartesian pendulum right there, QED. You understand that, right? Okay, there was a big jump there. How did we go from our second order expressions to this set of expressions, and why would we solve this set of equations? Let's look at this step by step. 
+
+Most numerical ODE solvers cannot solve higher order ODE systems, so instead they need to be lowered to first order systems. This is trivially done by defining a new variable that is equal to the derivative, i.e. D(x) = v. This means D(v) = D(D(x)), and thus we can solve the system D(x) = v, D(v) = D(D(x)), substituing the second derivative expression, and get a two variable system that is in first order form. This can be automated via the `ode_order_lowering` method:
 """
 
-# ╔═╡ 078f4008-ce36-41e9-a53b-82f8846746cc
-R = 1.0
+# ╔═╡ 3a003532-1b86-48a6-b439-cd5210e3d4d7
+@named pend_nosimp = ODESystem(eqs, t)
 
-# ╔═╡ ccfa7273-0b78-473a-b4c9-a434b56fc5f7
-C = 1.0
+# ╔═╡ 716b1138-af82-4db9-a41b-677650cb462d
+lowersys = complete(ode_order_lowering(pend_nosimp))
 
-# ╔═╡ c5d62e17-e0a9-4105-81a5-8b32e9714867
-V = 1.0
-
-# ╔═╡ 7e605280-bbe4-4645-b139-3ed08dff321f
+# ╔═╡ bd745912-d04b-4a56-aa65-77a3ae3151b3
 md"""
-Now let's build the model. To do this, we will create 4 components, a resistor, a capacitor, a ground, and a constant volage. We will then hook them up by connecting the pins of the objeect, and this will generate a composed equation.
+Now `ode_order_lowering` is generally not used for system simulation. Why? Let's try to solve this system:
 """
 
-# ╔═╡ 74511dbc-7659-4f04-b231-c59bd948f23c
+# ╔═╡ 31fee3ef-fc98-4c82-bc79-6881ca7156bd
+odelowerprob = ODEProblem(lowersys, [x => 1, y => 0, D(x) => 0, D(y) => 0, λ => 0], (0.0, 1.5), [g => 1])
+
+# ╔═╡ 200f6915-3fd3-4352-b658-995c09d296b2
+loweredsol = solve(odelowerprob, Rodas5P())
+
+# ╔═╡ eb514615-6a7a-4f39-b176-e993207d0d1d
+loweredsol2 = solve(odelowerprob, FBDF())
+
+# ╔═╡ 2a36b693-472b-47f0-9355-d6b0129156a5
+loweredsol.retcode
+
+# ╔═╡ daf6d7fb-0dd2-41b6-95f1-2b407ac48458
+plot(loweredsol)
+
+# ╔═╡ 985bbf12-ba5f-4d92-8a80-bce300b5c7fc
 md"""
-With this, the RCModel is a composed system which can be constructed.
+All of our solvers seem broken, what is going on? The issue can be found by looking at the Jacobian:
 """
 
-# ╔═╡ 36c4bd0d-274e-46e9-8e44-ed1357d23643
+# ╔═╡ c44b41e8-30e2-4b3e-bfab-69bf803af063
+@variables γ
+
+# ╔═╡ 098a4838-a4c0-443b-ba92-4f0982f7e3d0
+stepjac = [1 0 0 0 0
+		   0 1 0 0 0
+		   0 0 1 0 0
+	 	   0 0 0 1 0
+		   0 0 0 0 0] - γ*calculate_jacobian(lowersys)
+
+# ╔═╡ cfba8a64-329a-49c6-b44b-1ef0be98655f
+det(stepjac)
+
+# ╔═╡ 4cf3c74f-f31c-4147-8998-c22754daf27c
+substitute(det(stepjac), [γ=>0])
+
+# ╔═╡ 9d830db3-d4f6-4e8c-86f4-7f6137973d9a
 md"""
-This looks like the classic RC circuit equation! Now we can solve and use the symbolic indexing interface as before in order to understand the solution:
+Okay, that needs some explantion. `stepjac` is the Jacobian of the implicit solver in a general time stepping method. When that method is for example Implicit Euler, then `gamma = dt`, but generally it's some constant times `dt`. The point is, this means that as `dt -> 0`, this has the property that the Jacobain becomes singular, and thus the Newton system is not solvable/convergent as `dt -> 0`. This means that the DAE solver is not generally convergent on these types of equations... oh no!
+
+It turns out that DAEs can come in many flavors, and these flavors are known as the index of the DAE. An ODE is an index 0 DAE. An index 1 DAE has the property that all algebraic equations have some of the algebraic variables, and that there's a matching of each algebraic equation to a unique algebraic variable. The point here is that remember we have 5 equations:
 """
 
-# ╔═╡ 0f244b8a-1b88-4014-a9b0-cc1823c7fa50
+# ╔═╡ 522219fb-9efd-4414-95c5-32f1aac1a225
+equations(lowersys)
+
+# ╔═╡ 92883016-b30e-4909-a6ef-3d43325793cb
 md"""
-And there we go! We solved our first acausal model. But now let's start to understand it more.
+and we have 5 state variables. We have equations for how x evolves, D(x) evolves, y evolves, D(y) evolves, and a constraint equation. The constraint equation implicitly tells us what the tension λ should be, but the tension variable does not actually show up in the constraint equation. This is the cause of the singularity, and the lack of this property means that it's higher than index one.
 
-## Peeling Back the Surface: What Happened in our Model?
-
-Let's peel back a little bit. `@mtkbuild` both builds the model and runs the standard set of simplifications. What was going on there? Let's use the interactive tooling of ModelingToolkit.jl to understand. Let's simply build the system with `@named` and see the full set of equations:
+The differential index is the number of times the DAE needs to be differentiated in order to become an ODE. Let's see this in action:
 """
 
+# ╔═╡ 60a30f6a-906e-49d6-8e26-41cca46fce06
+Symbolics.derivative(x^2 + y^2 - 1, t)
 
-# ╔═╡ 2764c1e4-ac45-46eb-b6e6-1c77d4e66278
+# ╔═╡ 8aa4b09b-ecb9-4555-8370-046b75d3d69e
 md"""
-Next, let's expand the connectors in the equation in order to get a better sense of what the true underlying equations end up being:
+And we substitute:
 """
 
-# ╔═╡ 931e7873-c242-4638-9b0a-4635c0e5b210
+# ╔═╡ bdc3da66-9339-4fc3-8146-2a97b3e66d5d
+substitute(Symbolics.derivative(x^2 + y^2 - 1, t), [D(x) => unknowns(lowersys)[1], D(D(x)) => λ * x, D(y) => unknowns(lowersys)[2], D(D(y)) => λ * y - g])
+
+# ╔═╡ b2e711c4-a717-473c-b6b7-2a17a83db15c
 md"""
-Notice that the equation expansion generated the equations as the slide show suggested, i.e. the connection equations are expanded into equalty and summation conditions based on being a "normal" or a flow variable. Structural simplification then simplifies this down to the single ODE:
+That's still not index 1 because it doesn't have λ still. So let's differentiate again:
 """
 
-# ╔═╡ 3552283f-abc2-45ce-ba40-fce0ac0f2616
-md"""
-Thus we can see that the RC Circuit model wasn't just an "ODE", it's a set of differential-algebraic equations which explain the full set of interactions between all of the equations, which then gets simplified down in this case to just a single ODE. Of course, more complicated models cannot simplify as much, but this shows that the acausal model captures everything.
+# ╔═╡ 97caddef-020c-4ed6-bf2f-a097db91021c
+Symbolics.derivative(Symbolics.derivative(x^2 + y^2 - 1, t), t)
 
-This also means that there are observed equations for pretty much all values within the model. We can query them to generate time series for whatever values we need:
+# ╔═╡ f7a6a8d7-919c-4529-a815-8824c6b571a2
+doublediff = substitute(Symbolics.derivative(Symbolics.derivative(x^2 + y^2 - 1, t), t), [D(x) => unknowns(lowersys)[1], D(D(x)) => λ * x, D(y) => unknowns(lowersys)[2], D(D(y)) => λ * y - g])
+
+# ╔═╡ 34e3e5dc-fb23-4d0d-bd41-e3d5c3071176
+md"""
+It took differentiating this expression twice and substituting to get an expression with λ, and thus the cartesian pendulum is an index-3 system! This also shows us the equivalent set of equations we could solve that's the index-1 system! 
 """
 
-# ╔═╡ 34f780a8-ac32-4f42-9fca-97777bf827f1
+# ╔═╡ ec65dc23-34b7-402f-8dc5-d23a0a0460e6
+neweqs = [D(D(x)) ~ λ * x
+       D(D(y)) ~ λ * y - g
+       0 ~ doublediff]
+
+# ╔═╡ 60114fc2-6082-4ac8-969d-adb0f496bb70
+@named pend_doublediff = ODESystem(neweqs, t)
+
+# ╔═╡ f039750d-b0ce-423f-b9bc-f2b95209317e
+lowered_doublediff = complete(ode_order_lowering(pend_doublediff))
+
+# ╔═╡ a00957dc-7ff9-4bf1-928f-62461f490bef
+odelowerprob_doublediff = ODEProblem(lowered_doublediff, [x => 1, y => 0, D(x) => 0, D(y) => 0, λ => 0], (0.0, 5.0), [g => 1])
+
+# ╔═╡ a1224a0f-d762-4c50-8255-5d14e898db2c
+loweredsol_doublediff = solve(odelowerprob_doublediff, Rodas5P())
+
+# ╔═╡ 8589626c-11fa-4a10-b958-176b166f6a64
+plot(loweredsol_doublediff, idxs = (x,y))
+
+# ╔═╡ 45512fc4-b4ae-48b0-9cdd-478e9caca435
 md"""
-And similarly, since all parts of the system are defined and we have a complete initialization system, we can set the system to solve using other initial conditions, even if the variables were simplified away.
+And there you go, plotting x vs y we see that the solution is clearly a pendulum. That's all you had to do, figure out how to change your system and then it would solve well... and okay that's why you want to use ModelingToolkit to handle DAEs instead of writing them yourself. QED. We're done, let's go home.
 """
 
-# ╔═╡ bcd4c5dd-651b-4cab-b83b-5943beb0d150
+# ╔═╡ c626ca75-af76-45e2-b5b0-efb4dc8714c9
 md"""
-Thus to build, solve, and interact with the model, we actually don't need to know what the simplification engine will do. The interfaces are agnostic as to what's actually solved, giving ModelingToolkit the capability to keep adding new analytical solutions, simplifications, etc. to keep improving its processes!
+## But wait... structural simplify gave us different equations?
+
+If you look at the equations we got from the standard `@mtkbuild`, you will notice that this is not the system of equations it gives you:
 """
 
-# ╔═╡ aa42265e-00ef-4073-8597-6ac3d47f5266
+# ╔═╡ 58fc7eea-910d-4f33-912d-826da5b2d217
+equations(pend)
+
+# ╔═╡ 3eaba3a3-726d-4ee8-9c86-18b8991653d4
 md"""
-## Doing the Model Completely from Scratch: How Was the Full Hieraarchy of Components Defined?
+What is going on? Where did our other equations for D(y) and D(D(y)) go? I thought we understood the ODE order lowering, that was the easy part?
 
-Now let's peel back the standard library layer and understand how the component library was built. At the very bottom we define the electrical `Pin`, which is a component that simpliy describes the state at some point in the circuit. Any point in a circuit has a voltage and a current. 
-
-Since we will connect different components using our `Pin`, we will define it as a connector. Volatages and currents act very differently upon connections. When you connect two pins together in an electrical circuit, the voltages are made equal. However, current "flows". What "flow" means is that the current the goes out from one pin goes into the other. Or in other words, the current out from one equals the negative of the current flowing "out" from the other. `i1 = -i2`. Or, `i1 + i2 = 0`, i.e. that the currents always sum to zero at a junction.
-
-It turns out that this is a local description of Kirchoff's voltage and current laws! Thus when defining our connector, we need to specify that voltage acts one way, while current is a flow type variable.
+It turns out that the transformations we did here were not always a great idea. In particular, let's see what happens if we solve this version of the pendulum over a long time span:
 """
 
-# ╔═╡ b6aec1ef-32e1-492d-bef3-784fcbdadf1b
-@connector Pin begin
-    v(t)
-    i(t), [connect = Flow]
-end
+# ╔═╡ feab8583-7853-4c04-aec1-b5e589dff0dd
+odelowerprob_doublediff2 = ODEProblem(lowered_doublediff, [x => 1, y => 0, D(x) => 0, D(y) => 0, λ => 0], (0.0, 100.0), [g => 1])
 
-# ╔═╡ 8506cee9-9fd4-4559-9c7e-ab3119d1d2c8
+# ╔═╡ 04a0f3fe-8bc9-42c7-9b59-bb3b80e7bdf5
+loweredsol_doublediff2 = solve(odelowerprob_doublediff2, Rodas5P())
+
+# ╔═╡ 4def74e5-abea-4a02-80dd-e63719904e23
+plot(loweredsol_doublediff2, idxs = (x,y))
+
+# ╔═╡ 4a2889de-f3fb-4e6e-bc29-eeea247be687
 md"""
-While at first this may seem bespoke to electrical circuits, it turns out that these variable properties are rather universal. If you think about heat, connecting two points makes the temperature be the same, while the heat flux flows. With mechanical systems, you have forces sum to zero (Newton's third law) while the inertia of conencted components are the same.
+Notice that over time the solution drifts away from having x^2 + y^2 = 1, since we removed that equation! We only have that the second derivative of our constraint is zero, but not that it or its first derivative are zero. So so in order to enforce that our solution truly lives on the manifold, we need to recover these "implicit constraints". When doing so, we need to delete some redundent equations, because now we have 2 more constraint equations, we don't need two of the differntial equations...
 
-What's going on is that at a deep level, Hamiltonian systems naturally are divided into two sets of variables, and one corresponds to the equality part and the other corresponds to the flow part. So any Hamiltonian system can be described with acausal modeling! This is why it's a unversal system to physics.
-
-But that's a bit of a tangent, let's now get back to the pertinent modeling at hand. How do we actually use our connector to start building useful components? Let's start with `Ground`. The `Ground` component is a `Pin` that is connected to our ground, which we define to be the state of where voltage = 0. Thus we build a hierarchical system which has a Pin and adds our equation that states that the Pin's voltage is equal to zero:
+etc. etc. etc. and so we end up deleting two of the equations and get more constraint equations, which is why a DAE of index 3 adds 2 two constraints and deletes two differential equations that it understands are redundant.
 """
 
-# ╔═╡ f8ab475e-d3d6-4b2e-816c-0fbf32650632
-@mtkmodel Ground begin
-    @components begin
-        g = Pin()
-    end
-    @equations begin
-        g.v ~ 0
-    end
-end
+# ╔═╡ 217fd362-bc89-4a06-9bf7-385ac16e9975
+equations(pend)
 
-# ╔═╡ 7cd0d6da-2940-4efe-9cad-541044ef1116
+# ╔═╡ 64c8904d-1e80-4121-b1cb-859ff0309874
+prob_ss = ODEProblem(pend, [x => 1, y => 0], (0.0, 1.5), [g => 1], guesses = [λ => 1])
+
+# ╔═╡ a79b15c6-1da3-4abe-9dac-a7bee2b77372
+sol_ss = solve(prob_ss)
+
+# ╔═╡ ed61d13e-21a5-4ae8-8f14-da4f041eced1
+plot(sol_ss, idxs = (x,y))
+
+# ╔═╡ 7257f24e-6502-485a-bd81-2e5d8d625686
+sol[x^2 + y^2]
+
+# ╔═╡ 7c75b89c-7c74-4b45-9a8a-31781d82def7
 md"""
-And that's it, the first useful component! As you can see, all we do is state what's true about the system, what we know.
+And there you go, a pendulum solution which is satisfying the constraints exactly.
 
-Next, let's build an abstraction. A "OnePort" in electrical circuit parlance is any object which has two pins. I know I know, the nomenclature is a bit confusing, but it's standard so let's go with it. Everything like a resistor, transistor, capacitor, inductor, etc. is a `OnePort`, i.e. some electrical device that has two pins. So let's define our OnePort where we call one Pin the positive pin `p`, and one port the negative pin `n`.
-"""
+But... there's other issues. Etc.
 
-# ╔═╡ 13b6b2a8-1d2e-48dc-b608-29af98da7185
-@mtkmodel OnePort begin
-    @components begin
-        p = Pin()
-        n = Pin()
-    end
-    @variables begin
-        v(t)
-        i(t)
-    end
-    @equations begin
-        v ~ p.v - n.v
-        0 ~ p.i + n.i
-        i ~ p.i
-    end
-end
+## Conclusion
 
-# ╔═╡ 20f9244d-ffec-4728-8873-0e2a0380794e
-md"""
-Wait, I added some extra equations and variables in there, what's going on? Well when we talk about a OnePort object, it is also an object which has a voltage and current state. The voltage of a OnePort like a resistor or capacitor is defined as the voltage drop across the object. That gives the equation `v ~ p.v - n.v`, that the voltage of this object is the voltage drop from the positive to the negative pin. Next, there is a current that flows throw our object. Current flow must satisfy conservation of charge, i.e. every electron must be accounted for flowing in and flowing out. This means the current flowing in plus the current flowing out must be equal to zero, or `0 ~ p.i + n.i` is acausal (we don't truly know if the positive pin has a postiive current, but we don't care!). Given this, we give the definition that the current of a given device is the current that flows into the positive pin, i.e. `i ~ p.i`. And that's the equations of our OnePort.
-
-So now see that we have a hierarchy. Our OnePort has a voltage and a current, and it has two pins, and each of those two pins has a voltage and a current, and all of these are related in some intuitive way.
-
-Next, let's build our first OnePort object, the resistor. A resistor is a OnePort that satisfies Ohm's law, v=ir. Let's define that:
-"""
-
-# ╔═╡ 0c3028b5-b47f-4727-b569-0997234cedb8
-
-
-# ╔═╡ b5fd8f17-adeb-4d85-b949-59046bd1dd72
-@mtkmodel Resistor begin
-    @extend OnePort()
-    @parameters begin
-        R = 1.0 # Sets the default resistance
-    end
-    @equations begin
-        v ~ i * R
-    end
-end
-
-# ╔═╡ e684d6a2-d794-4a7f-97b8-006ce70c47d9
-md"""
-`@extend` means "make a OnePort and let me add to it. This means that this is effectively equivalent to having defined:
-"""
-
-# ╔═╡ ea34520f-a757-4191-9ccf-d68cc01d585b
-@mtkmodel ResistorComplete begin
-    @components begin
-        p = Pin()
-        n = Pin()
-    end
-    @variables begin
-        v(t)
-        i(t)
-    end
-	@parameters begin
-		R = 1.0
-	end
-    @equations begin
-        v ~ p.v - n.v
-        0 ~ p.i + n.i
-        i ~ p.i
-		v ~ i * R
-    end
-end
-
-# ╔═╡ b273e8e7-778f-41cb-87b9-e3de7a19a3dd
-md"""
-There truly is no difference, though this is an inheritance feature in MTK that makes it easier to build and maintain larger sets of models. As you can see though, it really is that simple, a Resistor is just a OnePort where we have defined a relationship between the OnePort's `v` and `i`, i.e. that they must satisfy Ohm's law.
-
-Similarly, a Capacitor is just a OnePort that adds the capacitance equation:
-"""
-
-# ╔═╡ 31e0d5de-974b-4fd4-b52e-7e237e922aed
-@mtkmodel Capacitor begin
-    @extend OnePort()
-    @parameters begin
-        C = 1.0
-    end
-    @equations begin
-        D(v) ~ i / C
-    end
-end
-
-# ╔═╡ 883771cb-7189-4325-ab5f-9d88ca1a1e6e
-md"""
-A constant voltage source is simply a OnePort where `v` is equal to some constant.
-"""
-
-# ╔═╡ 01095bd0-8e02-4476-bd3b-f996835376ee
-@mtkmodel ConstantVoltage begin
-    @extend OnePort()
-    @parameters begin
-        V = 1.0
-    end
-    @equations begin
-        V ~ v
-    end
-end
-
-# ╔═╡ 9b68a29a-083c-4cbd-9dda-f8fdc7077acf
-@mtkmodel RCModel begin
-    @components begin
-        resistor = Resistor(R = 1.0)
-        capacitor = Capacitor(C = 1.0)
-        source = ConstantVoltage(V = 1.0)
-        ground = Ground()
-    end
-    @equations begin
-        connect(source.p, resistor.p)
-        connect(resistor.n, capacitor.p)
-        connect(capacitor.n, source.n)
-        connect(capacitor.n, ground.g)
-    end
-end
-
-# ╔═╡ 3d24cd84-b1d5-46a0-8be4-e9f960a7db44
-@mtkbuild rc_model = RCModel()
-
-# ╔═╡ 649a3da5-876f-4d32-ac33-f6527e1e5c9b
-@named my_rc_model = RCModel()
-
-# ╔═╡ 280c0a3f-5a11-4f67-9f49-81249724cd0a
-expand_connections(my_rc_model)
-
-# ╔═╡ 7a81ecd1-a77b-479c-b59d-d11caf2863ec
-sys = complete(structural_simplify(my_rc_model))
-
-# ╔═╡ 1f9e4eb0-1ff2-4028-83b1-4d40ae953fc0
-u0 = [
-    sys.capacitor.v => 0.0
-]
-
-# ╔═╡ 89acbc53-4650-41bd-a2a1-768ce81391d2
-prob = ODEProblem(sys, u0, (0, 10.0))
-
-# ╔═╡ dd3178a1-2b74-4dbd-a52e-4fc8f502962c
-sol = solve(prob)
-
-# ╔═╡ 66e46193-606f-419d-a173-fb7528a3e9fc
-plot(sol, idxs = [sys.capacitor.v, sys.resistor.i],
-    title = "RC Circuit Demonstration",
-    labels = ["Capacitor Voltage" "Resistor Current"])
-
-# ╔═╡ bc9d92c5-8557-4b26-a972-b36676eb89e7
-plot(sol, idxs = [sys.resistor.v])
-
-# ╔═╡ 55d892d5-1b16-47e0-943d-988e5cd1d7ea
-alt_prob = ODEProblem(sys, [sys.resistor.v => 10.0], (0, 10.0))
-
-# ╔═╡ 5e64914a-96e7-4538-857b-cebea4771390
-alt_sol = solve(alt_prob)
-
-# ╔═╡ 03a1b3d5-58f8-4e34-8813-22e94bf65bf2
-plot(alt_sol, idxs = [sys.resistor.v])
-
-# ╔═╡ 3994858d-b2fd-4db3-afc7-1c8285f8ad68
-md"""
-And that's all the components we needed! So we can define our composed model by defining our components and connecting it up:
-"""
-
-# ╔═╡ 5b2fd47b-2364-42ec-b876-aa1979a44bd0
-@mtkmodel RCModel2 begin
-    @components begin
-        resistor = Resistor(R = 1.0)
-        capacitor = Capacitor(C = 1.0)
-        source = ConstantVoltage(V = 1.0)
-        ground = Ground()
-    end
-    @equations begin
-        connect(source.p, resistor.p)
-        connect(resistor.n, capacitor.p)
-        connect(capacitor.n, source.n)
-        connect(capacitor.n, ground.g)
-    end
-end
-
-# ╔═╡ 073101c8-a03d-4434-82ef-5f094b46b54e
-md"""
-And when we build the model we get what we expect:
-"""
-
-# ╔═╡ 2f4122f9-33b3-4c14-9d81-0abcae3c5f80
-@mtkbuild rc_model2 = RCModel2(resistor.R = 2.0)
-
-# ╔═╡ 58daa219-4f8a-4748-8f69-334155978ba3
-md"""
-And solve it like the other:
-"""
-
-# ╔═╡ dffad09b-157a-4119-8775-446c5cbcf8f6
-u02 = [
-    rc_model2.capacitor.v => 0.0
-]
-
-# ╔═╡ f5df9cbb-1744-49ac-950f-e3886ef9f802
-prob2 = ODEProblem(rc_model2, u02, (0, 10.0))
-
-# ╔═╡ 8be344cc-ddcd-4fb9-99da-81cbf49398fb
-sol2 = solve(prob2)
-
-# ╔═╡ b960089b-545e-49e2-bec8-7dadf27a8580
-plot(sol2)
-
-# ╔═╡ 5fb7d107-6fb1-4182-942c-0024a6afdec8
-md"""
-But importantly, we can now understand all of the equations inside of the system:
-"""
-
-# ╔═╡ d46bf7a7-1785-46a7-864a-6318dd8564df
-full_equations(rc_model2)
-
-# ╔═╡ 3e67b408-8f2e-4f01-a988-b4ee527f08f0
-observed(rc_model2)
-
-# ╔═╡ abe232de-abcb-47ee-a08e-c2c72e9deb73
-md"""
-## Conclusion: From Simple Components to High-Fidelity Digital Twins
-
-And that's all there is too it with acausal modeling. From there, the same keeps holding, but the components get more complex. Instead of an ideal resistor your resistor could have more complex physics that varies with heat, and adds a heat port, and then have a transistor which exactly models the physics of some 3nm TSMC process, etc. But you then build the composed model the same way, instantiate the components, define initial conditions, and solve.
-
-Thus the next steps to ModelingToolkit industrialization is building out component libraries, which is well-underway. The ModelingToolkitStandardLibrary is the core open source library, but there are many open source and commercial component libraries developing around the ModelingToolkit system. This makes it so that ever more complex models can be quickly created and executed.
+Let ModelingToolkit fix your DAE equations for you. This is a very deep topic!
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
-ModelingToolkitStandardLibrary = "16a59e39-deab-5bd0-87e4-056b12336739"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
 [compat]
 ModelingToolkit = "~9.24.0"
-ModelingToolkitStandardLibrary = "~2.7.3"
 OrdinaryDiffEq = "~6.85.0"
 Plots = "~1.40.5"
+Symbolics = "~5.33.0"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -385,7 +257,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "ca8b427ed1766548bf727f3910946b20e2426fe9"
+project_hash = "1e8889853f41818b25ad9030499f03ef819227f2"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "7a6b285f217ba92b5b474b783b4c2e8cf8218aaa"
@@ -1542,12 +1414,6 @@ version = "9.24.0"
     BifurcationKit = "0f109fa4-8a5d-4b75-95aa-f515264e7665"
     DeepDiffs = "ab62b9b5-e342-54a8-a765-a90f495de1a6"
 
-[[deps.ModelingToolkitStandardLibrary]]
-deps = ["ChainRulesCore", "DiffEqBase", "IfElse", "LinearAlgebra", "ModelingToolkit", "Symbolics"]
-git-tree-sha1 = "b387913af7deed57f7dabe31cd3a2cecc87bc13c"
-uuid = "16a59e39-deab-5bd0-87e4-056b12336739"
-version = "2.7.3"
-
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2023.1.10"
@@ -2628,65 +2494,59 @@ version = "1.4.1+1"
 """
 
 # ╔═╡ Cell order:
-# ╟─0d9f6bdf-3206-4529-bafc-27cb6ccfa1e3
-# ╠═cf67ac48-3d1c-11ef-38d1-b957caba74a3
-# ╠═69adf82c-4f09-4978-8386-c7706c0ee236
-# ╟─7877b648-3d23-4aec-b8c6-7926bf4f18da
-# ╠═199ec855-2a24-4eaa-8aa0-e9d87852b683
-# ╠═db0e0376-e3c5-4c5e-80f2-62a5933ac485
-# ╟─45cee94a-8894-4def-aa21-fab6621097eb
-# ╠═078f4008-ce36-41e9-a53b-82f8846746cc
-# ╠═ccfa7273-0b78-473a-b4c9-a434b56fc5f7
-# ╠═c5d62e17-e0a9-4105-81a5-8b32e9714867
-# ╟─7e605280-bbe4-4645-b139-3ed08dff321f
-# ╠═9b68a29a-083c-4cbd-9dda-f8fdc7077acf
-# ╟─74511dbc-7659-4f04-b231-c59bd948f23c
-# ╠═3d24cd84-b1d5-46a0-8be4-e9f960a7db44
-# ╟─36c4bd0d-274e-46e9-8e44-ed1357d23643
-# ╠═1f9e4eb0-1ff2-4028-83b1-4d40ae953fc0
-# ╠═89acbc53-4650-41bd-a2a1-768ce81391d2
-# ╠═dd3178a1-2b74-4dbd-a52e-4fc8f502962c
-# ╠═66e46193-606f-419d-a173-fb7528a3e9fc
-# ╟─0f244b8a-1b88-4014-a9b0-cc1823c7fa50
-# ╠═649a3da5-876f-4d32-ac33-f6527e1e5c9b
-# ╟─2764c1e4-ac45-46eb-b6e6-1c77d4e66278
-# ╠═280c0a3f-5a11-4f67-9f49-81249724cd0a
-# ╟─931e7873-c242-4638-9b0a-4635c0e5b210
-# ╠═7a81ecd1-a77b-479c-b59d-d11caf2863ec
-# ╟─3552283f-abc2-45ce-ba40-fce0ac0f2616
-# ╠═bc9d92c5-8557-4b26-a972-b36676eb89e7
-# ╟─34f780a8-ac32-4f42-9fca-97777bf827f1
-# ╠═55d892d5-1b16-47e0-943d-988e5cd1d7ea
-# ╠═5e64914a-96e7-4538-857b-cebea4771390
-# ╠═03a1b3d5-58f8-4e34-8813-22e94bf65bf2
-# ╟─bcd4c5dd-651b-4cab-b83b-5943beb0d150
-# ╟─aa42265e-00ef-4073-8597-6ac3d47f5266
-# ╠═b6aec1ef-32e1-492d-bef3-784fcbdadf1b
-# ╟─8506cee9-9fd4-4559-9c7e-ab3119d1d2c8
-# ╠═f8ab475e-d3d6-4b2e-816c-0fbf32650632
-# ╟─7cd0d6da-2940-4efe-9cad-541044ef1116
-# ╠═13b6b2a8-1d2e-48dc-b608-29af98da7185
-# ╟─20f9244d-ffec-4728-8873-0e2a0380794e
-# ╠═0c3028b5-b47f-4727-b569-0997234cedb8
-# ╠═b5fd8f17-adeb-4d85-b949-59046bd1dd72
-# ╟─e684d6a2-d794-4a7f-97b8-006ce70c47d9
-# ╠═ea34520f-a757-4191-9ccf-d68cc01d585b
-# ╟─b273e8e7-778f-41cb-87b9-e3de7a19a3dd
-# ╠═31e0d5de-974b-4fd4-b52e-7e237e922aed
-# ╟─883771cb-7189-4325-ab5f-9d88ca1a1e6e
-# ╠═01095bd0-8e02-4476-bd3b-f996835376ee
-# ╟─3994858d-b2fd-4db3-afc7-1c8285f8ad68
-# ╠═5b2fd47b-2364-42ec-b876-aa1979a44bd0
-# ╠═073101c8-a03d-4434-82ef-5f094b46b54e
-# ╠═2f4122f9-33b3-4c14-9d81-0abcae3c5f80
-# ╠═58daa219-4f8a-4748-8f69-334155978ba3
-# ╠═dffad09b-157a-4119-8775-446c5cbcf8f6
-# ╠═f5df9cbb-1744-49ac-950f-e3886ef9f802
-# ╠═8be344cc-ddcd-4fb9-99da-81cbf49398fb
-# ╠═b960089b-545e-49e2-bec8-7dadf27a8580
-# ╟─5fb7d107-6fb1-4182-942c-0024a6afdec8
-# ╠═d46bf7a7-1785-46a7-864a-6318dd8564df
-# ╠═3e67b408-8f2e-4f01-a988-b4ee527f08f0
-# ╟─abe232de-abcb-47ee-a08e-c2c72e9deb73
+# ╟─bd8835ff-6fad-427a-8042-47d5b1f08b43
+# ╠═86f2c937-f0f8-4fad-8607-e7b03fa1b46e
+# ╠═ae4f5b02-ab7d-46e3-ac8c-8fd1fe63ae51
+# ╠═70b2cf2f-4f37-40e5-ac19-65f59598258e
+# ╠═058e5d29-1444-4e27-8c0e-401172fb3d75
+# ╠═ac027c64-4f39-46e1-950c-207f87ec72b6
+# ╟─0058790e-8ef4-4bf0-ab8e-0a5a8b65914b
+# ╠═e5250569-ad65-45f5-8fd1-a153bbeeea40
+# ╟─564d8d51-882e-4319-8a10-691a7660ebb7
+# ╠═3a003532-1b86-48a6-b439-cd5210e3d4d7
+# ╠═716b1138-af82-4db9-a41b-677650cb462d
+# ╟─bd745912-d04b-4a56-aa65-77a3ae3151b3
+# ╠═31fee3ef-fc98-4c82-bc79-6881ca7156bd
+# ╠═200f6915-3fd3-4352-b658-995c09d296b2
+# ╠═eb514615-6a7a-4f39-b176-e993207d0d1d
+# ╠═2a36b693-472b-47f0-9355-d6b0129156a5
+# ╠═daf6d7fb-0dd2-41b6-95f1-2b407ac48458
+# ╟─985bbf12-ba5f-4d92-8a80-bce300b5c7fc
+# ╠═c44b41e8-30e2-4b3e-bfab-69bf803af063
+# ╠═098a4838-a4c0-443b-ba92-4f0982f7e3d0
+# ╠═1affc344-b742-4e0d-8a21-9dfd46055f98
+# ╠═cfba8a64-329a-49c6-b44b-1ef0be98655f
+# ╠═4cf3c74f-f31c-4147-8998-c22754daf27c
+# ╟─9d830db3-d4f6-4e8c-86f4-7f6137973d9a
+# ╠═522219fb-9efd-4414-95c5-32f1aac1a225
+# ╟─92883016-b30e-4909-a6ef-3d43325793cb
+# ╠═a298cb80-38f8-4673-8f85-2c00046027a5
+# ╠═60a30f6a-906e-49d6-8e26-41cca46fce06
+# ╟─8aa4b09b-ecb9-4555-8370-046b75d3d69e
+# ╠═bdc3da66-9339-4fc3-8146-2a97b3e66d5d
+# ╟─b2e711c4-a717-473c-b6b7-2a17a83db15c
+# ╠═97caddef-020c-4ed6-bf2f-a097db91021c
+# ╠═f7a6a8d7-919c-4529-a815-8824c6b571a2
+# ╟─34e3e5dc-fb23-4d0d-bd41-e3d5c3071176
+# ╠═ec65dc23-34b7-402f-8dc5-d23a0a0460e6
+# ╠═60114fc2-6082-4ac8-969d-adb0f496bb70
+# ╠═f039750d-b0ce-423f-b9bc-f2b95209317e
+# ╠═a00957dc-7ff9-4bf1-928f-62461f490bef
+# ╠═a1224a0f-d762-4c50-8255-5d14e898db2c
+# ╠═8589626c-11fa-4a10-b958-176b166f6a64
+# ╟─45512fc4-b4ae-48b0-9cdd-478e9caca435
+# ╟─c626ca75-af76-45e2-b5b0-efb4dc8714c9
+# ╠═58fc7eea-910d-4f33-912d-826da5b2d217
+# ╠═3eaba3a3-726d-4ee8-9c86-18b8991653d4
+# ╠═feab8583-7853-4c04-aec1-b5e589dff0dd
+# ╠═04a0f3fe-8bc9-42c7-9b59-bb3b80e7bdf5
+# ╠═4def74e5-abea-4a02-80dd-e63719904e23
+# ╟─4a2889de-f3fb-4e6e-bc29-eeea247be687
+# ╠═217fd362-bc89-4a06-9bf7-385ac16e9975
+# ╠═64c8904d-1e80-4121-b1cb-859ff0309874
+# ╠═a79b15c6-1da3-4abe-9dac-a7bee2b77372
+# ╠═ed61d13e-21a5-4ae8-8f14-da4f041eced1
+# ╠═7257f24e-6502-485a-bd81-2e5d8d625686
+# ╟─7c75b89c-7c74-4b45-9a8a-31781d82def7
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

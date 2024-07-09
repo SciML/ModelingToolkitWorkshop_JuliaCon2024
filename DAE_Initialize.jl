@@ -4,377 +4,210 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ cf67ac48-3d1c-11ef-38d1-b957caba74a3
-using ModelingToolkit, Plots, OrdinaryDiffEq
+# ╔═╡ 0ac4226f-9a06-4378-848e-ccd04f3b1af5
+using ModelingToolkit, OrdinaryDiffEq, Plots
 
-# ╔═╡ 69adf82c-4f09-4978-8386-c7706c0ee236
+# ╔═╡ 9943ce31-d69f-4821-b202-2ae42537aaf1
 using ModelingToolkit: t_nounits as t, D_nounits as D
 
-# ╔═╡ 199ec855-2a24-4eaa-8aa0-e9d87852b683
-using ModelingToolkitStandardLibrary.Electrical
-
-# ╔═╡ db0e0376-e3c5-4c5e-80f2-62a5933ac485
-using ModelingToolkitStandardLibrary.Blocks: Constant
-
-# ╔═╡ 0d9f6bdf-3206-4529-bafc-27cb6ccfa1e3
+# ╔═╡ 878606f4-3d82-11ef-0653-47b3810fe0c5
 md"""
-# Introduction to Acausal Modeling via the RC Circuit
+# Initialization of ModelingToolkit DAEs
 
-In this tutorial we will learn acausal modeling by learning how to build the RC Circuit model. It is highly recommended you see the slideshow first introducing acausal modeling, and then dive into this notebook!
+Now we are deep into ModelingToolkit. We have learned that we can just write out equations, but in general building our model using reusable physical components instead requires acausal modeling, and acausal modeling gives us DAEs. We learned that DAE systems can be rather complicated in terms of how they must be specified in order to be solved, but ModelingToolkit has a deep simplification engine that transforms the equations into a solvable form.
+
+But if I don't even know what my equations or state variables are going to be because MTK can just delete some at will... how do I specify my initial conditions? This is called the initializaiton problem in DAEs, and it's a surprisingly deep topic.
+
+In the context of ODEs, there is no such thing as an initialization step. You give an initial condition, and that is that. Your initial condition is almighty, the solver just uses it. But now let's consider a DAE:
 """
 
-# ╔═╡ 7877b648-3d23-4aec-b8c6-7926bf4f18da
+# ╔═╡ d52b1b72-8c28-4551-9f61-7ce60162a7b6
+@variables a(t) b(t)
+
+# ╔═╡ 6ab9036b-dad2-4058-b3f1-7c82e771a9bd
+[D(a) ~ b
+ b ~ a]
+
+# ╔═╡ 8cdd3ceb-d670-4586-af21-77eed372f7b2
 md"""
+Now we give our system the initial conditions `a(0) = 1` and `b(0) = 0`... do you see what just happened? Since `a = b`, we actually need to have `a(0) = b(0)`. So we actually only need one initial condition, even though there's two variables for two equations.
 
-## Part 1: Building the Acausal Model using Standard Library Components
-
-As a first step, we will learn how to build the RC circuit model using standard library components. To do this, we will first bring in the pre-defined components from the library:
+It turns out these redundancies can come from all over, and they can be amplified by things like the dummy derivative transformation. Let's go back over to our trusty old cartesian pendulum which we now know to be much more complicated than one would first think. This system is:
 """
 
-# ╔═╡ 45cee94a-8894-4def-aa21-fab6621097eb
+# ╔═╡ 07447ee0-4766-4fd9-8378-43d934c0abb1
+@parameters g = 1 #normalize gravity to 1
+
+# ╔═╡ 9d02d920-2cb8-4f73-ae76-293327103a51
+@variables x(t) y(t) [state_priority = 10] λ(t)
+
+# ╔═╡ ece89d12-0c7a-4955-bcf6-e7fb49bad2e1
+eqs = [D(D(x)) ~ λ * x
+       D(D(y)) ~ λ * y - g
+       x^2 + y^2 ~ 1]
+
+# ╔═╡ 6e686160-d3e3-46e3-bad4-85d8fe962271
+@mtkbuild pend = ODESystem(eqs, t)
+
+# ╔═╡ 9e343330-3e50-463a-b1b4-f05503aa4d8f
 md"""
-Next we will define a few constants:
+Notice that because it chose to eliminate the equations for `y`, what we actually need to give are only the initial conditions for `y(0)` and `D(y(0))`, everything else can be found through the implicit constraint equations.
 """
 
-# ╔═╡ 078f4008-ce36-41e9-a53b-82f8846746cc
-R = 1.0
+# ╔═╡ f5bd5b0c-2452-4848-b164-7b777276d7b8
+prob_yinit = ODEProblem(pend, [y => 0, D(y) => 0], (0.0, 1.5), [g => 1], guesses = [λ => 1, x => 1.0])
 
-# ╔═╡ ccfa7273-0b78-473a-b4c9-a434b56fc5f7
-C = 1.0
-
-# ╔═╡ c5d62e17-e0a9-4105-81a5-8b32e9714867
-V = 1.0
-
-# ╔═╡ 7e605280-bbe4-4645-b139-3ed08dff321f
+# ╔═╡ fa39bbdb-fd60-4e5e-a123-959b0b2f5618
 md"""
-Now let's build the model. To do this, we will create 4 components, a resistor, a capacitor, a ground, and a constant volage. We will then hook them up by connecting the pins of the objeect, and this will generate a composed equation.
+Notice that for values which are not provided we give a guess so that it knows how to solve for the other variables given the nonlinear systems. This gives a system that can be solved:
 """
 
-# ╔═╡ 74511dbc-7659-4f04-b231-c59bd948f23c
+# ╔═╡ cc96cca1-fcb7-4849-9812-49de9cb15aa0
+# ╠═╡ disabled = true
+#=╠═╡
+sol = solve(prob_yinit)
+  ╠═╡ =#
+
+# ╔═╡ 9cabe0b7-5b9d-4f98-b304-7d7f72ba6d01
+#=╠═╡
+plot(sol, idxs = (x,y))
+  ╠═╡ =#
+
+# ╔═╡ 03c0241e-e4d6-4f9b-9dfd-7030c95ff3f0
 md"""
-With this, the RCModel is a composed system which can be constructed.
+But saying "[y => 0, D(y) => 0]" as the initial condition is kind of weird. You don't always know the starting velocity of the system? What if I just know (x,y)? Then you can give that:
 """
 
-# ╔═╡ 36c4bd0d-274e-46e9-8e44-ed1357d23643
+# ╔═╡ e8bad433-71d9-427d-92da-961583b72e3f
+sol2 = solve(ODEProblem(pend, [x => 1, y => 0], (0.0, 1.5), [g => 1], guesses = [λ => 1]))
+
+# ╔═╡ bc976a5a-7ea4-41e6-9ad4-756a193d7bb0
+#=╠═╡
+plot(sol, idxs = (x,y))
+  ╠═╡ =#
+
+# ╔═╡ c29dd6c5-f77c-4c00-9309-7131a55e0f9f
 md"""
-This looks like the classic RC circuit equation! Now we can solve and use the symbolic indexing interface as before in order to understand the solution:
+It's the same thing! ModelingToolkit's intiailization system auto-magically builds a system that re-translates the given set of initial conditions into the variables it knows the solver needs. This means you don't need to worry about giving "the right variables", just any consistent set. We can also do more advanced things, like make an initial condition dependent on a parameter or expression:
 """
 
-# ╔═╡ 0f244b8a-1b88-4014-a9b0-cc1823c7fa50
+# ╔═╡ 09be6705-d96b-4476-8158-20711f80c533
+sol3 = solve(ODEProblem(pend, [x => 1, D(y) => g], (0.0, 1.5), [g => 1], guesses = [λ => 1, y => 1]))
+
+# ╔═╡ f6ea7b24-494e-489e-b58b-6296c2226376
 md"""
-And there we go! We solved our first acausal model. But now let's start to understand it more.
+You can initialize the derivatives of variables to be values, and create custom equations to be satisfied. There's lots of flexability in what is allowed.
 
-## Peeling Back the Surface: What Happened in our Model?
-
-Let's peel back a little bit. `@mtkbuild` both builds the model and runs the standard set of simplifications. What was going on there? Let's use the interactive tooling of ModelingToolkit.jl to understand. Let's simply build the system with `@named` and see the full set of equations:
+But what happens if we have an incorrect number of conditions? MTK will warn you about that scenario and do a smart thing.
 """
 
+# ╔═╡ 5bc91aae-c603-4fe1-9534-02027143305b
+prob_under = ODEProblem(pend, [x => 1], (0.0, 1.5), [g => 1], guesses = [y => 0, λ => 1])
 
-# ╔═╡ 2764c1e4-ac45-46eb-b6e6-1c77d4e66278
+# ╔═╡ 1eab9725-162f-4acf-9ea5-ab55ba93ddb8
 md"""
-Next, let's expand the connectors in the equation in order to get a better sense of what the true underlying equations end up being:
+An underdetermined system has a non-unique solution to its initialization, and thus you will get a warning but it will let you solve it and pick a solution of the set of possible solutions that satisfy the given conditions:
 """
 
-# ╔═╡ 931e7873-c242-4638-9b0a-4635c0e5b210
+# ╔═╡ df9e3e7f-e330-49e0-aadc-c754d4ba2e00
+sol_under = solve(prob_under)
+
+# ╔═╡ 79bcda76-9d2a-47bb-a98a-adb5d90170ad
 md"""
-Notice that the equation expansion generated the equations as the slide show suggested, i.e. the connection equations are expanded into equalty and summation conditions based on being a "normal" or a flow variable. Structural simplification then simplifies this down to the single ODE:
+In the opposite direction, an overdetermined system similarly gives a warning:
 """
 
-# ╔═╡ 3552283f-abc2-45ce-ba40-fce0ac0f2616
-md"""
-Thus we can see that the RC Circuit model wasn't just an "ODE", it's a set of differential-algebraic equations which explain the full set of interactions between all of the equations, which then gets simplified down in this case to just a single ODE. Of course, more complicated models cannot simplify as much, but this shows that the acausal model captures everything.
+# ╔═╡ bba3b975-ae95-4ca8-a8a5-85c21a781e2f
+prob_over = ODEProblem(
+    pend, [x => 1, y => 0.0, D(y) => 0], (0.0, 1.5), [g => 1], guesses = [λ => 1])
 
-This also means that there are observed equations for pretty much all values within the model. We can query them to generate time series for whatever values we need:
+# ╔═╡ 2b91406a-0a3f-4821-ae98-d16c3f7ad139
+md"""
+In this case, the issue is whether there are any initial conditions that satisfy all of the conditions.
 """
 
-# ╔═╡ 34f780a8-ac32-4f42-9fca-97777bf827f1
+# ╔═╡ 8184f96d-4c9e-434f-8650-9abe7fe4f540
+sol_over = solve(prob_over, Rodas5P())
+
+# ╔═╡ 050df185-9bf4-4f6e-8adc-d5f949f4a29c
 md"""
-And similarly, since all parts of the system are defined and we have a complete initialization system, we can set the system to solve using other initial conditions, even if the variables were simplified away.
+This worked! But what if we change the conditions?
 """
 
-# ╔═╡ bcd4c5dd-651b-4cab-b83b-5943beb0d150
+# ╔═╡ 4aae580f-7d31-44a9-9c09-4eedb684acaa
+prob_over2 = ODEProblem(
+    pend, [x => 1, y => 0.0, D(y) => 2.0, λ => 1], (0.0, 1.5), [g => 1], guesses = [λ => 1])
+
+# ╔═╡ 8cea6063-1335-4e8b-bb45-336e27a74795
+sol_over2 = solve(prob_over2, Rodas5P())
+
+# ╔═╡ 18114009-0b4e-419d-9abe-7f5ec3bbf2bd
+sol_over2.retcode
+
+# ╔═╡ 6106d073-2974-45b4-8a8a-f68f0a0bbce1
 md"""
-Thus to build, solve, and interact with the model, we actually don't need to know what the simplification engine will do. The interfaces are agnostic as to what's actually solved, giving ModelingToolkit the capability to keep adding new analytical solutions, simplifications, etc. to keep improving its processes!
+The system shows that there is an initialization failure, which means it could not find a compatible initial condition.
+
+## Diving Deeper: Investigating the Initialization System
+
+The initialization system is just a NonlinearSystem itself, so you can construct it and investigate it:
 """
 
-# ╔═╡ aa42265e-00ef-4073-8597-6ac3d47f5266
+# ╔═╡ 13f31239-1d19-4da3-9cdb-fda92e4f7738
+isys = generate_initializesystem(pend, u0map = [x => 1.0, y => 0.0], guesses = [λ => 1])
+
+# ╔═╡ a2ad0ca2-581f-432c-b7f3-bc0aba03012b
 md"""
-## Doing the Model Completely from Scratch: How Was the Full Hieraarchy of Components Defined?
-
-Now let's peel back the standard library layer and understand how the component library was built. At the very bottom we define the electrical `Pin`, which is a component that simpliy describes the state at some point in the circuit. Any point in a circuit has a voltage and a current. 
-
-Since we will connect different components using our `Pin`, we will define it as a connector. Volatages and currents act very differently upon connections. When you connect two pins together in an electrical circuit, the voltages are made equal. However, current "flows". What "flow" means is that the current the goes out from one pin goes into the other. Or in other words, the current out from one equals the negative of the current flowing "out" from the other. `i1 = -i2`. Or, `i1 + i2 = 0`, i.e. that the currents always sum to zero at a junction.
-
-It turns out that this is a local description of Kirchoff's voltage and current laws! Thus when defining our connector, we need to specify that voltage acts one way, while current is a flow type variable.
+You can use this in order to investgate why you have so many/few quesitons, and what equations are missing. Note that if you want to simplify a over/underdetermined system, you need to specify the simplification with `fully_determined=false`:
 """
 
-# ╔═╡ b6aec1ef-32e1-492d-bef3-784fcbdadf1b
-@connector Pin begin
-    v(t)
-    i(t), [connect = Flow]
-end
+# ╔═╡ c8d250ea-f065-4502-b61d-e91d5b22b37e
+isys_simp = structural_simplify(isys; fully_determined = false)
 
-# ╔═╡ 8506cee9-9fd4-4559-9c7e-ab3119d1d2c8
+# ╔═╡ 4bab01f6-b25e-45cb-897d-dc3fcfb90c43
 md"""
-While at first this may seem bespoke to electrical circuits, it turns out that these variable properties are rather universal. If you think about heat, connecting two points makes the temperature be the same, while the heat flux flows. With mechanical systems, you have forces sum to zero (Newton's third law) while the inertia of conencted components are the same.
-
-What's going on is that at a deep level, Hamiltonian systems naturally are divided into two sets of variables, and one corresponds to the equality part and the other corresponds to the flow part. So any Hamiltonian system can be described with acausal modeling! This is why it's a unversal system to physics.
-
-But that's a bit of a tangent, let's now get back to the pertinent modeling at hand. How do we actually use our connector to start building useful components? Let's start with `Ground`. The `Ground` component is a `Pin` that is connected to our ground, which we define to be the state of where voltage = 0. Thus we build a hierarchical system which has a Pin and adds our equation that states that the Pin's voltage is equal to zero:
+Using this information, let's find out why our overdetermined system was not initializable:
 """
 
-# ╔═╡ f8ab475e-d3d6-4b2e-816c-0fbf32650632
-@mtkmodel Ground begin
-    @components begin
-        g = Pin()
-    end
-    @equations begin
-        g.v ~ 0
-    end
-end
+# ╔═╡ ca18973f-6edb-461e-8d18-0c1926c598e3
+isys2 = ModelingToolkit.generate_initializesystem(
+    pend, u0map = [x => 1, y => 0.0, D(y) => 2.0, λ => 1], guesses = [λ => 1])
 
-# ╔═╡ 7cd0d6da-2940-4efe-9cad-541044ef1116
+# ╔═╡ 64b3447f-cbc2-45bf-89f4-28fb59d7a42e
+isys2_simp = structural_simplify(isys2; fully_determined = false)
+
+# ╔═╡ 950cc455-321c-43ed-9296-9b8b6fd2cfdc
+unknowns(isys2_simp)
+
+# ╔═╡ 010a19a4-a871-4030-a3d2-9970c6fca7eb
+observed(isys2_simp)
+
+# ╔═╡ bf1bd7f7-e291-43e4-a712-434cf5426e15
+subdict = Dict(getfield.(observed(isys2_simp),:lhs) .=> getfield.(observed(isys2_simp),:rhs))
+
+# ╔═╡ b71818de-4bad-43af-ab54-01de8b091f3a
+ModelingToolkit.fixpoint_sub.(equations(isys2_simp), (subdict,))
+
+# ╔═╡ 71fa338a-f5f2-4bdb-9f04-c915e9aaf4ff
 md"""
-And that's it, the first useful component! As you can see, all we do is state what's true about the system, what we know.
+By substituting the observed variables in, we can see that one of the equations is requiring D(x) = 0, while another is requiring that D(x) is non-zero. That's clearly impossible, and thus it's clear that the numerical solving of this system will not be possible.
 
-Next, let's build an abstraction. A "OnePort" in electrical circuit parlance is any object which has two pins. I know I know, the nomenclature is a bit confusing, but it's standard so let's go with it. Everything like a resistor, transistor, capacitor, inductor, etc. is a `OnePort`, i.e. some electrical device that has two pins. So let's define our OnePort where we call one Pin the positive pin `p`, and one port the negative pin `n`.
-"""
+While more difficult systems may not be as easy to investigate, this shows how to interactively use the symbolic manipulation system with ModelingToolkit's system transformations in order to really investigate what's going on in the equations!
 
-# ╔═╡ 13b6b2a8-1d2e-48dc-b608-29af98da7185
-@mtkmodel OnePort begin
-    @components begin
-        p = Pin()
-        n = Pin()
-    end
-    @variables begin
-        v(t)
-        i(t)
-    end
-    @equations begin
-        v ~ p.v - n.v
-        0 ~ p.i + n.i
-        i ~ p.i
-    end
-end
+## Conclusion
 
-# ╔═╡ 20f9244d-ffec-4728-8873-0e2a0380794e
-md"""
-Wait, I added some extra equations and variables in there, what's going on? Well when we talk about a OnePort object, it is also an object which has a voltage and current state. The voltage of a OnePort like a resistor or capacitor is defined as the voltage drop across the object. That gives the equation `v ~ p.v - n.v`, that the voltage of this object is the voltage drop from the positive to the negative pin. Next, there is a current that flows throw our object. Current flow must satisfy conservation of charge, i.e. every electron must be accounted for flowing in and flowing out. This means the current flowing in plus the current flowing out must be equal to zero, or `0 ~ p.i + n.i` is acausal (we don't truly know if the positive pin has a postiive current, but we don't care!). Given this, we give the definition that the current of a given device is the current that flows into the positive pin, i.e. `i ~ p.i`. And that's the equations of our OnePort.
-
-So now see that we have a hierarchy. Our OnePort has a voltage and a current, and it has two pins, and each of those two pins has a voltage and a current, and all of these are related in some intuitive way.
-
-Next, let's build our first OnePort object, the resistor. A resistor is a OnePort that satisfies Ohm's law, v=ir. Let's define that:
-"""
-
-# ╔═╡ 0c3028b5-b47f-4727-b569-0997234cedb8
-
-
-# ╔═╡ b5fd8f17-adeb-4d85-b949-59046bd1dd72
-@mtkmodel Resistor begin
-    @extend OnePort()
-    @parameters begin
-        R = 1.0 # Sets the default resistance
-    end
-    @equations begin
-        v ~ i * R
-    end
-end
-
-# ╔═╡ e684d6a2-d794-4a7f-97b8-006ce70c47d9
-md"""
-`@extend` means "make a OnePort and let me add to it. This means that this is effectively equivalent to having defined:
-"""
-
-# ╔═╡ ea34520f-a757-4191-9ccf-d68cc01d585b
-@mtkmodel ResistorComplete begin
-    @components begin
-        p = Pin()
-        n = Pin()
-    end
-    @variables begin
-        v(t)
-        i(t)
-    end
-	@parameters begin
-		R = 1.0
-	end
-    @equations begin
-        v ~ p.v - n.v
-        0 ~ p.i + n.i
-        i ~ p.i
-		v ~ i * R
-    end
-end
-
-# ╔═╡ b273e8e7-778f-41cb-87b9-e3de7a19a3dd
-md"""
-There truly is no difference, though this is an inheritance feature in MTK that makes it easier to build and maintain larger sets of models. As you can see though, it really is that simple, a Resistor is just a OnePort where we have defined a relationship between the OnePort's `v` and `i`, i.e. that they must satisfy Ohm's law.
-
-Similarly, a Capacitor is just a OnePort that adds the capacitance equation:
-"""
-
-# ╔═╡ 31e0d5de-974b-4fd4-b52e-7e237e922aed
-@mtkmodel Capacitor begin
-    @extend OnePort()
-    @parameters begin
-        C = 1.0
-    end
-    @equations begin
-        D(v) ~ i / C
-    end
-end
-
-# ╔═╡ 883771cb-7189-4325-ab5f-9d88ca1a1e6e
-md"""
-A constant voltage source is simply a OnePort where `v` is equal to some constant.
-"""
-
-# ╔═╡ 01095bd0-8e02-4476-bd3b-f996835376ee
-@mtkmodel ConstantVoltage begin
-    @extend OnePort()
-    @parameters begin
-        V = 1.0
-    end
-    @equations begin
-        V ~ v
-    end
-end
-
-# ╔═╡ 9b68a29a-083c-4cbd-9dda-f8fdc7077acf
-@mtkmodel RCModel begin
-    @components begin
-        resistor = Resistor(R = 1.0)
-        capacitor = Capacitor(C = 1.0)
-        source = ConstantVoltage(V = 1.0)
-        ground = Ground()
-    end
-    @equations begin
-        connect(source.p, resistor.p)
-        connect(resistor.n, capacitor.p)
-        connect(capacitor.n, source.n)
-        connect(capacitor.n, ground.g)
-    end
-end
-
-# ╔═╡ 3d24cd84-b1d5-46a0-8be4-e9f960a7db44
-@mtkbuild rc_model = RCModel()
-
-# ╔═╡ 649a3da5-876f-4d32-ac33-f6527e1e5c9b
-@named my_rc_model = RCModel()
-
-# ╔═╡ 280c0a3f-5a11-4f67-9f49-81249724cd0a
-expand_connections(my_rc_model)
-
-# ╔═╡ 7a81ecd1-a77b-479c-b59d-d11caf2863ec
-sys = complete(structural_simplify(my_rc_model))
-
-# ╔═╡ 1f9e4eb0-1ff2-4028-83b1-4d40ae953fc0
-u0 = [
-    sys.capacitor.v => 0.0
-]
-
-# ╔═╡ 89acbc53-4650-41bd-a2a1-768ce81391d2
-prob = ODEProblem(sys, u0, (0, 10.0))
-
-# ╔═╡ dd3178a1-2b74-4dbd-a52e-4fc8f502962c
-sol = solve(prob)
-
-# ╔═╡ 66e46193-606f-419d-a173-fb7528a3e9fc
-plot(sol, idxs = [sys.capacitor.v, sys.resistor.i],
-    title = "RC Circuit Demonstration",
-    labels = ["Capacitor Voltage" "Resistor Current"])
-
-# ╔═╡ bc9d92c5-8557-4b26-a972-b36676eb89e7
-plot(sol, idxs = [sys.resistor.v])
-
-# ╔═╡ 55d892d5-1b16-47e0-943d-988e5cd1d7ea
-alt_prob = ODEProblem(sys, [sys.resistor.v => 10.0], (0, 10.0))
-
-# ╔═╡ 5e64914a-96e7-4538-857b-cebea4771390
-alt_sol = solve(alt_prob)
-
-# ╔═╡ 03a1b3d5-58f8-4e34-8813-22e94bf65bf2
-plot(alt_sol, idxs = [sys.resistor.v])
-
-# ╔═╡ 3994858d-b2fd-4db3-afc7-1c8285f8ad68
-md"""
-And that's all the components we needed! So we can define our composed model by defining our components and connecting it up:
-"""
-
-# ╔═╡ 5b2fd47b-2364-42ec-b876-aa1979a44bd0
-@mtkmodel RCModel2 begin
-    @components begin
-        resistor = Resistor(R = 1.0)
-        capacitor = Capacitor(C = 1.0)
-        source = ConstantVoltage(V = 1.0)
-        ground = Ground()
-    end
-    @equations begin
-        connect(source.p, resistor.p)
-        connect(resistor.n, capacitor.p)
-        connect(capacitor.n, source.n)
-        connect(capacitor.n, ground.g)
-    end
-end
-
-# ╔═╡ 073101c8-a03d-4434-82ef-5f094b46b54e
-md"""
-And when we build the model we get what we expect:
-"""
-
-# ╔═╡ 2f4122f9-33b3-4c14-9d81-0abcae3c5f80
-@mtkbuild rc_model2 = RCModel2(resistor.R = 2.0)
-
-# ╔═╡ 58daa219-4f8a-4748-8f69-334155978ba3
-md"""
-And solve it like the other:
-"""
-
-# ╔═╡ dffad09b-157a-4119-8775-446c5cbcf8f6
-u02 = [
-    rc_model2.capacitor.v => 0.0
-]
-
-# ╔═╡ f5df9cbb-1744-49ac-950f-e3886ef9f802
-prob2 = ODEProblem(rc_model2, u02, (0, 10.0))
-
-# ╔═╡ 8be344cc-ddcd-4fb9-99da-81cbf49398fb
-sol2 = solve(prob2)
-
-# ╔═╡ b960089b-545e-49e2-bec8-7dadf27a8580
-plot(sol2)
-
-# ╔═╡ 5fb7d107-6fb1-4182-942c-0024a6afdec8
-md"""
-But importantly, we can now understand all of the equations inside of the system:
-"""
-
-# ╔═╡ d46bf7a7-1785-46a7-864a-6318dd8564df
-full_equations(rc_model2)
-
-# ╔═╡ 3e67b408-8f2e-4f01-a988-b4ee527f08f0
-observed(rc_model2)
-
-# ╔═╡ abe232de-abcb-47ee-a08e-c2c72e9deb73
-md"""
-## Conclusion: From Simple Components to High-Fidelity Digital Twins
-
-And that's all there is too it with acausal modeling. From there, the same keeps holding, but the components get more complex. Instead of an ideal resistor your resistor could have more complex physics that varies with heat, and adds a heat port, and then have a transistor which exactly models the physics of some 3nm TSMC process, etc. But you then build the composed model the same way, instantiate the components, define initial conditions, and solve.
-
-Thus the next steps to ModelingToolkit industrialization is building out component libraries, which is well-underway. The ModelingToolkitStandardLibrary is the core open source library, but there are many open source and commercial component libraries developing around the ModelingToolkit system. This makes it so that ever more complex models can be quickly created and executed.
+We can end here even though there is so much more to show. But this shows how all of the pieces, from symbolic-numeric optimizations to symbolic simplifications, all mixed with the numerical methods, combines to give a system that makes modeling and simulation easier.
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
-ModelingToolkitStandardLibrary = "16a59e39-deab-5bd0-87e4-056b12336739"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 
 [compat]
 ModelingToolkit = "~9.24.0"
-ModelingToolkitStandardLibrary = "~2.7.3"
 OrdinaryDiffEq = "~6.85.0"
 Plots = "~1.40.5"
 """
@@ -385,7 +218,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "ca8b427ed1766548bf727f3910946b20e2426fe9"
+project_hash = "231700c165787f592bb952fbca186d8fdaffe049"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "7a6b285f217ba92b5b474b783b4c2e8cf8218aaa"
@@ -1542,12 +1375,6 @@ version = "9.24.0"
     BifurcationKit = "0f109fa4-8a5d-4b75-95aa-f515264e7665"
     DeepDiffs = "ab62b9b5-e342-54a8-a765-a90f495de1a6"
 
-[[deps.ModelingToolkitStandardLibrary]]
-deps = ["ChainRulesCore", "DiffEqBase", "IfElse", "LinearAlgebra", "ModelingToolkit", "Symbolics"]
-git-tree-sha1 = "b387913af7deed57f7dabe31cd3a2cecc87bc13c"
-uuid = "16a59e39-deab-5bd0-87e4-056b12336739"
-version = "2.7.3"
-
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2023.1.10"
@@ -2628,65 +2455,49 @@ version = "1.4.1+1"
 """
 
 # ╔═╡ Cell order:
-# ╟─0d9f6bdf-3206-4529-bafc-27cb6ccfa1e3
-# ╠═cf67ac48-3d1c-11ef-38d1-b957caba74a3
-# ╠═69adf82c-4f09-4978-8386-c7706c0ee236
-# ╟─7877b648-3d23-4aec-b8c6-7926bf4f18da
-# ╠═199ec855-2a24-4eaa-8aa0-e9d87852b683
-# ╠═db0e0376-e3c5-4c5e-80f2-62a5933ac485
-# ╟─45cee94a-8894-4def-aa21-fab6621097eb
-# ╠═078f4008-ce36-41e9-a53b-82f8846746cc
-# ╠═ccfa7273-0b78-473a-b4c9-a434b56fc5f7
-# ╠═c5d62e17-e0a9-4105-81a5-8b32e9714867
-# ╟─7e605280-bbe4-4645-b139-3ed08dff321f
-# ╠═9b68a29a-083c-4cbd-9dda-f8fdc7077acf
-# ╟─74511dbc-7659-4f04-b231-c59bd948f23c
-# ╠═3d24cd84-b1d5-46a0-8be4-e9f960a7db44
-# ╟─36c4bd0d-274e-46e9-8e44-ed1357d23643
-# ╠═1f9e4eb0-1ff2-4028-83b1-4d40ae953fc0
-# ╠═89acbc53-4650-41bd-a2a1-768ce81391d2
-# ╠═dd3178a1-2b74-4dbd-a52e-4fc8f502962c
-# ╠═66e46193-606f-419d-a173-fb7528a3e9fc
-# ╟─0f244b8a-1b88-4014-a9b0-cc1823c7fa50
-# ╠═649a3da5-876f-4d32-ac33-f6527e1e5c9b
-# ╟─2764c1e4-ac45-46eb-b6e6-1c77d4e66278
-# ╠═280c0a3f-5a11-4f67-9f49-81249724cd0a
-# ╟─931e7873-c242-4638-9b0a-4635c0e5b210
-# ╠═7a81ecd1-a77b-479c-b59d-d11caf2863ec
-# ╟─3552283f-abc2-45ce-ba40-fce0ac0f2616
-# ╠═bc9d92c5-8557-4b26-a972-b36676eb89e7
-# ╟─34f780a8-ac32-4f42-9fca-97777bf827f1
-# ╠═55d892d5-1b16-47e0-943d-988e5cd1d7ea
-# ╠═5e64914a-96e7-4538-857b-cebea4771390
-# ╠═03a1b3d5-58f8-4e34-8813-22e94bf65bf2
-# ╟─bcd4c5dd-651b-4cab-b83b-5943beb0d150
-# ╟─aa42265e-00ef-4073-8597-6ac3d47f5266
-# ╠═b6aec1ef-32e1-492d-bef3-784fcbdadf1b
-# ╟─8506cee9-9fd4-4559-9c7e-ab3119d1d2c8
-# ╠═f8ab475e-d3d6-4b2e-816c-0fbf32650632
-# ╟─7cd0d6da-2940-4efe-9cad-541044ef1116
-# ╠═13b6b2a8-1d2e-48dc-b608-29af98da7185
-# ╟─20f9244d-ffec-4728-8873-0e2a0380794e
-# ╠═0c3028b5-b47f-4727-b569-0997234cedb8
-# ╠═b5fd8f17-adeb-4d85-b949-59046bd1dd72
-# ╟─e684d6a2-d794-4a7f-97b8-006ce70c47d9
-# ╠═ea34520f-a757-4191-9ccf-d68cc01d585b
-# ╟─b273e8e7-778f-41cb-87b9-e3de7a19a3dd
-# ╠═31e0d5de-974b-4fd4-b52e-7e237e922aed
-# ╟─883771cb-7189-4325-ab5f-9d88ca1a1e6e
-# ╠═01095bd0-8e02-4476-bd3b-f996835376ee
-# ╟─3994858d-b2fd-4db3-afc7-1c8285f8ad68
-# ╠═5b2fd47b-2364-42ec-b876-aa1979a44bd0
-# ╠═073101c8-a03d-4434-82ef-5f094b46b54e
-# ╠═2f4122f9-33b3-4c14-9d81-0abcae3c5f80
-# ╠═58daa219-4f8a-4748-8f69-334155978ba3
-# ╠═dffad09b-157a-4119-8775-446c5cbcf8f6
-# ╠═f5df9cbb-1744-49ac-950f-e3886ef9f802
-# ╠═8be344cc-ddcd-4fb9-99da-81cbf49398fb
-# ╠═b960089b-545e-49e2-bec8-7dadf27a8580
-# ╟─5fb7d107-6fb1-4182-942c-0024a6afdec8
-# ╠═d46bf7a7-1785-46a7-864a-6318dd8564df
-# ╠═3e67b408-8f2e-4f01-a988-b4ee527f08f0
-# ╟─abe232de-abcb-47ee-a08e-c2c72e9deb73
+# ╟─878606f4-3d82-11ef-0653-47b3810fe0c5
+# ╠═0ac4226f-9a06-4378-848e-ccd04f3b1af5
+# ╠═9943ce31-d69f-4821-b202-2ae42537aaf1
+# ╠═d52b1b72-8c28-4551-9f61-7ce60162a7b6
+# ╠═6ab9036b-dad2-4058-b3f1-7c82e771a9bd
+# ╟─8cdd3ceb-d670-4586-af21-77eed372f7b2
+# ╠═07447ee0-4766-4fd9-8378-43d934c0abb1
+# ╠═9d02d920-2cb8-4f73-ae76-293327103a51
+# ╠═ece89d12-0c7a-4955-bcf6-e7fb49bad2e1
+# ╠═6e686160-d3e3-46e3-bad4-85d8fe962271
+# ╟─9e343330-3e50-463a-b1b4-f05503aa4d8f
+# ╠═f5bd5b0c-2452-4848-b164-7b777276d7b8
+# ╟─fa39bbdb-fd60-4e5e-a123-959b0b2f5618
+# ╠═cc96cca1-fcb7-4849-9812-49de9cb15aa0
+# ╠═9cabe0b7-5b9d-4f98-b304-7d7f72ba6d01
+# ╠═03c0241e-e4d6-4f9b-9dfd-7030c95ff3f0
+# ╠═e8bad433-71d9-427d-92da-961583b72e3f
+# ╠═bc976a5a-7ea4-41e6-9ad4-756a193d7bb0
+# ╟─c29dd6c5-f77c-4c00-9309-7131a55e0f9f
+# ╠═09be6705-d96b-4476-8158-20711f80c533
+# ╟─f6ea7b24-494e-489e-b58b-6296c2226376
+# ╠═5bc91aae-c603-4fe1-9534-02027143305b
+# ╟─1eab9725-162f-4acf-9ea5-ab55ba93ddb8
+# ╠═df9e3e7f-e330-49e0-aadc-c754d4ba2e00
+# ╟─79bcda76-9d2a-47bb-a98a-adb5d90170ad
+# ╠═bba3b975-ae95-4ca8-a8a5-85c21a781e2f
+# ╟─2b91406a-0a3f-4821-ae98-d16c3f7ad139
+# ╠═8184f96d-4c9e-434f-8650-9abe7fe4f540
+# ╠═050df185-9bf4-4f6e-8adc-d5f949f4a29c
+# ╠═4aae580f-7d31-44a9-9c09-4eedb684acaa
+# ╠═8cea6063-1335-4e8b-bb45-336e27a74795
+# ╠═18114009-0b4e-419d-9abe-7f5ec3bbf2bd
+# ╟─6106d073-2974-45b4-8a8a-f68f0a0bbce1
+# ╠═13f31239-1d19-4da3-9cdb-fda92e4f7738
+# ╟─a2ad0ca2-581f-432c-b7f3-bc0aba03012b
+# ╠═c8d250ea-f065-4502-b61d-e91d5b22b37e
+# ╠═4bab01f6-b25e-45cb-897d-dc3fcfb90c43
+# ╠═ca18973f-6edb-461e-8d18-0c1926c598e3
+# ╠═64b3447f-cbc2-45bf-89f4-28fb59d7a42e
+# ╠═950cc455-321c-43ed-9296-9b8b6fd2cfdc
+# ╠═010a19a4-a871-4030-a3d2-9970c6fca7eb
+# ╠═bf1bd7f7-e291-43e4-a712-434cf5426e15
+# ╠═b71818de-4bad-43af-ab54-01de8b091f3a
+# ╟─71fa338a-f5f2-4bdb-9f04-c915e9aaf4ff
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
