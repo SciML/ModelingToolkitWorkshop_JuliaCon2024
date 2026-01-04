@@ -195,14 +195,14 @@ md"""
         v(t)
         i(t)
     end
-	@parameters begin
-		R = 1.0
-	end
+    @parameters begin
+        R = 1.0
+    end
     @equations begin
         v ~ p.v - n.v
         0 ~ p.i + n.i
         i ~ p.i
-		v ~ i * R
+        v ~ i * R
     end
 end
 
@@ -270,7 +270,7 @@ sys = complete(structural_simplify(my_rc_model))
 
 # ╔═╡ 1f9e4eb0-1ff2-4028-83b1-4d40ae953fc0
 u0 = [
-    sys.capacitor.v => 0.0
+    sys.capacitor.v => 0.0,
 ]
 
 # ╔═╡ 89acbc53-4650-41bd-a2a1-768ce81391d2
@@ -280,9 +280,11 @@ prob = ODEProblem(sys, u0, (0, 10.0))
 sol = solve(prob)
 
 # ╔═╡ 66e46193-606f-419d-a173-fb7528a3e9fc
-plot(sol, idxs = [sys.capacitor.v, sys.resistor.i],
+plot(
+    sol, idxs = [sys.capacitor.v, sys.resistor.i],
     title = "RC Circuit Demonstration",
-    labels = ["Capacitor Voltage" "Resistor Current"])
+    labels = ["Capacitor Voltage" "Resistor Current"]
+)
 
 # ╔═╡ bc9d92c5-8557-4b26-a972-b36676eb89e7
 plot(sol, idxs = [sys.resistor.v])
@@ -332,7 +334,7 @@ And solve it like the other:
 
 # ╔═╡ dffad09b-157a-4119-8775-446c5cbcf8f6
 u02 = [
-    rc_model2.capacitor.v => 0.0
+    rc_model2.capacitor.v => 0.0,
 ]
 
 # ╔═╡ f5df9cbb-1744-49ac-950f-e3886ef9f802

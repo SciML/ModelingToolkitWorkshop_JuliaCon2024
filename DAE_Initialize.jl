@@ -25,8 +25,10 @@ In the context of ODEs, there is no such thing as an initialization step. You gi
 @variables a(t) b(t)
 
 # ╔═╡ 6ab9036b-dad2-4058-b3f1-7c82e771a9bd
-[D(a) ~ b
- b ~ a]
+[
+    D(a) ~ b
+    b ~ a
+]
 
 # ╔═╡ 8cdd3ceb-d670-4586-af21-77eed372f7b2
 md"""
@@ -42,9 +44,11 @@ It turns out these redundancies can come from all over, and they can be amplifie
 @variables x(t) y(t) [state_priority = 10] λ(t)
 
 # ╔═╡ ece89d12-0c7a-4955-bcf6-e7fb49bad2e1
-eqs = [D(D(x)) ~ λ * x
-       D(D(y)) ~ λ * y - g
-       x^2 + y^2 ~ 1]
+eqs = [
+    D(D(x)) ~ λ * x
+    D(D(y)) ~ λ * y - g
+    x^2 + y^2 ~ 1
+]
 
 # ╔═╡ 6e686160-d3e3-46e3-bad4-85d8fe962271
 @mtkbuild pend = ODESystem(eqs, t)
@@ -66,7 +70,7 @@ Notice that for values which are not provided we give a guess so that it knows h
 soly = solve(prob_yinit)
 
 # ╔═╡ 9cabe0b7-5b9d-4f98-b304-7d7f72ba6d01
-plot(soly, idxs = (x,y))
+plot(soly, idxs = (x, y))
 
 # ╔═╡ 03c0241e-e4d6-4f9b-9dfd-7030c95ff3f0
 md"""
@@ -77,7 +81,7 @@ But saying "[y => 0, D(y) => 0]" as the initial condition is kind of weird. You 
 sol2 = solve(ODEProblem(pend, [x => 1, y => 0], (0.0, 1.5), [g => 1], guesses = [λ => 1]))
 
 # ╔═╡ bc976a5a-7ea4-41e6-9ad4-756a193d7bb0
-plot(sol2, idxs = (x,y))
+plot(sol2, idxs = (x, y))
 
 # ╔═╡ c29dd6c5-f77c-4c00-9309-7131a55e0f9f
 md"""
@@ -112,7 +116,8 @@ In the opposite direction, an overdetermined system similarly gives a warning:
 
 # ╔═╡ bba3b975-ae95-4ca8-a8a5-85c21a781e2f
 prob_over = ODEProblem(
-    pend, [x => 1, y => 0.0, D(y) => 0], (0.0, 1.5), [g => 1], guesses = [λ => 1])
+    pend, [x => 1, y => 0.0, D(y) => 0], (0.0, 1.5), [g => 1], guesses = [λ => 1]
+)
 
 # ╔═╡ 2b91406a-0a3f-4821-ae98-d16c3f7ad139
 md"""
@@ -129,7 +134,8 @@ This worked! But what if we change the conditions?
 
 # ╔═╡ 4aae580f-7d31-44a9-9c09-4eedb684acaa
 prob_over2 = ODEProblem(
-    pend, [x => 1, y => 0.0, D(y) => 2.0, λ => 1], (0.0, 1.5), [g => 1], guesses = [λ => 1])
+    pend, [x => 1, y => 0.0, D(y) => 2.0, λ => 1], (0.0, 1.5), [g => 1], guesses = [λ => 1]
+)
 
 # ╔═╡ 8cea6063-1335-4e8b-bb45-336e27a74795
 sol_over2 = solve(prob_over2, Rodas5P())
@@ -164,7 +170,8 @@ Using this information, let's find out why our overdetermined system was not ini
 
 # ╔═╡ ca18973f-6edb-461e-8d18-0c1926c598e3
 isys2 = ModelingToolkit.generate_initializesystem(
-    pend, u0map = [x => 1, y => 0.0, D(y) => 2.0, λ => 1], guesses = [λ => 1])
+    pend, u0map = [x => 1, y => 0.0, D(y) => 2.0, λ => 1], guesses = [λ => 1]
+)
 
 # ╔═╡ 64b3447f-cbc2-45bf-89f4-28fb59d7a42e
 isys2_simp = structural_simplify(isys2; fully_determined = false)
@@ -176,7 +183,7 @@ unknowns(isys2_simp)
 observed(isys2_simp)
 
 # ╔═╡ bf1bd7f7-e291-43e4-a712-434cf5426e15
-subdict = Dict(getfield.(observed(isys2_simp),:lhs) .=> getfield.(observed(isys2_simp),:rhs))
+subdict = Dict(getfield.(observed(isys2_simp), :lhs) .=> getfield.(observed(isys2_simp), :rhs))
 
 # ╔═╡ b71818de-4bad-43af-ab54-01de8b091f3a
 ModelingToolkit.fixpoint_sub.(equations(isys2_simp), (subdict,))
