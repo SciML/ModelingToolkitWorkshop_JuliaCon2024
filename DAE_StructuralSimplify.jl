@@ -33,15 +33,17 @@ The full set of equations is:
 """
 
 # ╔═╡ 70b2cf2f-4f37-40e5-ac19-65f59598258e
-@parameters g=1 # normalize gravity to 1
+@parameters g = 1 # normalize gravity to 1
 
 # ╔═╡ 058e5d29-1444-4e27-8c0e-401172fb3d75
 @variables x(t) y(t) [state_priority = 10] λ(t)
 
 # ╔═╡ ac027c64-4f39-46e1-950c-207f87ec72b6
-eqs = [D(D(x)) ~ λ * x
-       D(D(y)) ~ λ * y - g
-       0 ~ x^2 + y^2 - 1]
+eqs = [
+    D(D(x)) ~ λ * x
+    D(D(y)) ~ λ * y - g
+    0 ~ x^2 + y^2 - 1
+]
 
 # ╔═╡ 0058790e-8ef4-4bf0-ab8e-0a5a8b65914b
 md"""
@@ -95,17 +97,19 @@ All of our solvers seem broken, what is going on? The issue can be found by look
 @variables γ
 
 # ╔═╡ 098a4838-a4c0-443b-ba92-4f0982f7e3d0
-stepjac = [1 0 0 0 0
-		   0 1 0 0 0
-		   0 0 1 0 0
-	 	   0 0 0 1 0
-		   0 0 0 0 0] - γ*calculate_jacobian(lowersys)
+stepjac = [
+    1 0 0 0 0
+    0 1 0 0 0
+    0 0 1 0 0
+    0 0 0 1 0
+    0 0 0 0 0
+] - γ * calculate_jacobian(lowersys)
 
 # ╔═╡ cfba8a64-329a-49c6-b44b-1ef0be98655f
 det(stepjac)
 
 # ╔═╡ 4cf3c74f-f31c-4147-8998-c22754daf27c
-substitute(det(stepjac), [γ=>0])
+substitute(det(stepjac), [γ => 0])
 
 # ╔═╡ 9d830db3-d4f6-4e8c-86f4-7f6137973d9a
 md"""
@@ -152,9 +156,11 @@ It took differentiating this expression twice and substituting to get an express
 """
 
 # ╔═╡ ec65dc23-34b7-402f-8dc5-d23a0a0460e6
-neweqs = [D(D(x)) ~ λ * x
-       D(D(y)) ~ λ * y - g
-       0 ~ doublediff]
+neweqs = [
+    D(D(x)) ~ λ * x
+    D(D(y)) ~ λ * y - g
+    0 ~ doublediff
+]
 
 # ╔═╡ 60114fc2-6082-4ac8-969d-adb0f496bb70
 @named pend_doublediff = ODESystem(neweqs, t)
@@ -169,7 +175,7 @@ odelowerprob_doublediff = ODEProblem(lowered_doublediff, [x => 1, y => 0, D(x) =
 loweredsol_doublediff = solve(odelowerprob_doublediff, Rodas5P())
 
 # ╔═╡ 8589626c-11fa-4a10-b958-176b166f6a64
-plot(loweredsol_doublediff, idxs = (x,y))
+plot(loweredsol_doublediff, idxs = (x, y))
 
 # ╔═╡ 45512fc4-b4ae-48b0-9cdd-478e9caca435
 md"""
@@ -200,7 +206,7 @@ odelowerprob_doublediff2 = ODEProblem(lowered_doublediff, [x => 1, y => 0, D(x) 
 loweredsol_doublediff2 = solve(odelowerprob_doublediff2, Rodas5P())
 
 # ╔═╡ 4def74e5-abea-4a02-80dd-e63719904e23
-plot(loweredsol_doublediff2, idxs = (x,y))
+plot(loweredsol_doublediff2, idxs = (x, y))
 
 # ╔═╡ 4a2889de-f3fb-4e6e-bc29-eeea247be687
 md"""
@@ -219,7 +225,7 @@ prob_ss = ODEProblem(pend, [x => 1, y => 0], (0.0, 1.5), [g => 1], guesses = [λ
 sol_ss = solve(prob_ss)
 
 # ╔═╡ ed61d13e-21a5-4ae8-8f14-da4f041eced1
-plot(sol_ss, idxs = (x,y))
+plot(sol_ss, idxs = (x, y))
 
 # ╔═╡ 7257f24e-6502-485a-bd81-2e5d8d625686
 sol[x^2 + y^2]

@@ -67,10 +67,10 @@ So you think, okay you set that up with built-in Julia functions? No, Symbolics 
 """
 
 # ╔═╡ 2d3e7ec7-04d8-4607-82ee-cc00762f0245
-my_expression(x,y) = sqrt(x^2 + y^2)
+my_expression(x, y) = sqrt(x^2 + y^2)
 
 # ╔═╡ 91c167e2-608d-445e-b891-74b89d34831e
-my_expression(x,y)
+my_expression(x, y)
 
 # ╔═╡ a83a2753-016b-4df1-9229-0e295f459f28
 md"""
@@ -78,8 +78,10 @@ And this can get complicated. Here's a few examples. For example, let's define a
 """
 
 # ╔═╡ 68cda7d4-ee90-4d45-b503-24eeec988230
-A = [x y
-     y x]
+A = [
+    x y
+    y x
+]
 
 # ╔═╡ 28d83dba-d8b0-4e9e-b4f4-502811165c98
 md"""
@@ -97,15 +99,15 @@ As a party trick, let's show what happens on an RK4 integrator:
 """
 
 # ╔═╡ 85133a24-8276-44dc-82b7-43ad9d689bb4
-function my_ode(x,p,t)
-  sin(x^2)
+function my_ode(x, p, t)
+    return sin(x^2)
 end
 
 # ╔═╡ 77f3698b-8173-4e60-abc2-9488c64d611d
-symprob = ODEProblem(my_ode, x, (0.0,1.0))
+symprob = ODEProblem(my_ode, x, (0.0, 1.0))
 
 # ╔═╡ 06eaf852-aca8-4d94-b578-a9c94dc06cba
-symsol = solve(symprob, RK4(), adaptive=false, dt = 0.25)
+symsol = solve(symprob, RK4(), adaptive = false, dt = 0.25)
 
 # ╔═╡ 7470fee9-5795-4d3d-8bd8-a065b660eea9
 print(symsol[end])
@@ -186,8 +188,12 @@ There are of course many other tools to make use of, like equation simplificatio
 """
 
 # ╔═╡ 3700a04e-1379-4502-bcde-0f4de5e2087d
-simplify.([x + x^2 + x + x^2  2x + 4x
-           x + y + y + 2x     x^2 - x^2 + y^2])
+simplify.(
+    [
+        x + x^2 + x + x^2  2x + 4x
+        x + y + y + 2x     x^2 - x^2 + y^2
+    ]
+)
 
 # ╔═╡ 3359bfc6-54da-4918-ab4a-a21a8ce30af7
 md"""
@@ -207,7 +213,7 @@ For example, let's look at the following:
 myexpr = sin(x^2 + y^2) / cos(z)
 
 # ╔═╡ 66d6353b-800a-4907-ba80-f1b06f724b8e
-Base.remove_linenums!(build_function(myexpr, [x,y], z))
+Base.remove_linenums!(build_function(myexpr, [x, y], z))
 
 # ╔═╡ 85951b69-6ce9-4611-9e61-47bcd1c061ed
 md"""
@@ -218,7 +224,7 @@ Notice that we told it to build a function for `myexpr` where the first argument
 """
 
 # ╔═╡ a2c8d095-4d68-4902-89b0-fc17f12463ee
-Base.remove_linenums!(build_function(myexpr, [x,y,z]))
+Base.remove_linenums!(build_function(myexpr, [x, y, z]))
 
 # ╔═╡ f4ec6fb1-a641-47f6-a59a-561ef5d155fb
 md"""
@@ -232,15 +238,17 @@ Now we're ready to start building models with ModelingToolkit. Let's use Modelin
 """
 
 # ╔═╡ 0323f817-9483-421b-8fd4-bb7939ba087d
-@variables 🐰(t) 🐺(t) tot(t) 
+@variables 🐰(t) 🐺(t) tot(t)
 
 # ╔═╡ 1044f777-1dad-491a-9ecd-455ed88d0ecf
-@parameters α=1.5 β=1.0 γ=3.0 δ=1.0
+@parameters α = 1.5 β = 1.0 γ = 3.0 δ = 1.0
 
 # ╔═╡ 1e8736bf-16ee-4096-8791-b985e1fdc9c9
-eqs = [D(🐰) ~ α * 🐰 - β * 🐰 * 🐺
-       D(🐺) ~ -γ * 🐺 + δ * 🐰 * 🐺
-       tot ~ 🐰 + 🐺]
+eqs = [
+    D(🐰) ~ α * 🐰 - β * 🐰 * 🐺
+    D(🐺) ~ -γ * 🐺 + δ * 🐰 * 🐺
+    tot ~ 🐰 + 🐺
+]
 
 # ╔═╡ e71fd5c6-8e90-4335-868b-9f3dd43209fa
 md"""
@@ -258,7 +266,7 @@ So up until this point, we still have not effectively used ModelingToolkit at al
 """
 
 # ╔═╡ b157ae07-48eb-4452-ac00-0ede838aef51
-@mtkbuild sys = ODESystem(eqs,t)
+@mtkbuild sys = ODESystem(eqs, t)
 
 # ╔═╡ c3e8dd58-5f6b-41d5-9c32-b0a9b6dc9943
 display(sys)
@@ -297,7 +305,7 @@ We will see in a second how and why this is important. So now, let's solve this 
 """
 
 # ╔═╡ ea59bf7c-33b8-4b08-b166-e8f245ca0bdb
-prob = ODEProblem(sys, [🐰 => 1.0, 🐺 => 1.0], (0.0,10.0))
+prob = ODEProblem(sys, [🐰 => 1.0, 🐺 => 1.0], (0.0, 10.0))
 
 # ╔═╡ d22c73d9-8138-432c-a364-3dfd4a7ecba3
 md"""
@@ -352,7 +360,7 @@ One other piece not mentioned, how come I didn't specify the parameters in `prob
 """
 
 # ╔═╡ 5c812d1c-4167-4bf6-b4f8-6dff91612677
-prob2 = ODEProblem(sys, [🐰 => 1.0, 🐺 => 1.0], (0.0,10.0), [α => 3.0])
+prob2 = ODEProblem(sys, [🐰 => 1.0, 🐺 => 1.0], (0.0, 10.0), [α => 3.0])
 
 # ╔═╡ c0098a90-9364-4b7f-a05f-e3c6f76af233
 sol2 = solve(prob2)
