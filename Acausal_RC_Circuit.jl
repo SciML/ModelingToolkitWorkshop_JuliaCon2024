@@ -47,7 +47,7 @@ V = 1.0
 
 # ╔═╡ 7e605280-bbe4-4645-b139-3ed08dff321f
 md"""
-Now let's build the model. To do this, we will create 4 components, a resistor, a capacitor, a ground, and a constant volage. We will then hook them up by connecting the pins of the objeect, and this will generate a composed equation.
+Now let's build the model. To do this, we will create 4 components, a resistor, a capacitor, a ground, and a constant volage. We will then hook them up by connecting the pins of the object, and this will generate a composed equation.
 """
 
 # ╔═╡ 74511dbc-7659-4f04-b231-c59bd948f23c
@@ -101,9 +101,9 @@ Thus to build, solve, and interact with the model, we actually don't need to kno
 md"""
 ## Doing the Model Completely from Scratch: How Was the Full Hieraarchy of Components Defined?
 
-Now let's peel back the standard library layer and understand how the component library was built. At the very bottom we define the electrical `Pin`, which is a component that simpliy describes the state at some point in the circuit. Any point in a circuit has a voltage and a current. 
+Now let's peel back the standard library layer and understand how the component library was built. At the very bottom we define the electrical `Pin`, which is a component that simply describes the state at some point in the circuit. Any point in a circuit has a voltage and a current. 
 
-Since we will connect different components using our `Pin`, we will define it as a connector. Volatages and currents act very differently upon connections. When you connect two pins together in an electrical circuit, the voltages are made equal. However, current "flows". What "flow" means is that the current the goes out from one pin goes into the other. Or in other words, the current out from one equals the negative of the current flowing "out" from the other. `i1 = -i2`. Or, `i1 + i2 = 0`, i.e. that the currents always sum to zero at a junction.
+Since we will connect different components using our `Pin`, we will define it as a connector. Voltages and currents act very differently upon connections. When you connect two pins together in an electrical circuit, the voltages are made equal. However, current "flows". What "flow" means is that the current the goes out from one pin goes into the other. Or in other words, the current out from one equals the negative of the current flowing "out" from the other. `i1 = -i2`. Or, `i1 + i2 = 0`, i.e. that the currents always sum to zero at a junction.
 
 It turns out that this is a local description of Kirchoff's voltage and current laws! Thus when defining our connector, we need to specify that voltage acts one way, while current is a flow type variable.
 """
@@ -116,9 +116,9 @@ end
 
 # ╔═╡ 8506cee9-9fd4-4559-9c7e-ab3119d1d2c8
 md"""
-While at first this may seem bespoke to electrical circuits, it turns out that these variable properties are rather universal. If you think about heat, connecting two points makes the temperature be the same, while the heat flux flows. With mechanical systems, you have forces sum to zero (Newton's third law) while the inertia of conencted components are the same.
+While at first this may seem bespoke to electrical circuits, it turns out that these variable properties are rather universal. If you think about heat, connecting two points makes the temperature be the same, while the heat flux flows. With mechanical systems, you have forces sum to zero (Newton's third law) while the inertia of connected components are the same.
 
-What's going on is that at a deep level, Hamiltonian systems naturally are divided into two sets of variables, and one corresponds to the equality part and the other corresponds to the flow part. So any Hamiltonian system can be described with acausal modeling! This is why it's a unversal system to physics.
+What's going on is that at a deep level, Hamiltonian systems naturally are divided into two sets of variables, and one corresponds to the equality part and the other corresponds to the flow part. So any Hamiltonian system can be described with acausal modeling! This is why it's a universal system to physics.
 
 But that's a bit of a tangent, let's now get back to the pertinent modeling at hand. How do we actually use our connector to start building useful components? Let's start with `Ground`. The `Ground` component is a `Pin` that is connected to our ground, which we define to be the state of where voltage = 0. Thus we build a hierarchical system which has a Pin and adds our equation that states that the Pin's voltage is equal to zero:
 """
@@ -159,7 +159,7 @@ end
 
 # ╔═╡ 20f9244d-ffec-4728-8873-0e2a0380794e
 md"""
-Wait, I added some extra equations and variables in there, what's going on? Well when we talk about a OnePort object, it is also an object which has a voltage and current state. The voltage of a OnePort like a resistor or capacitor is defined as the voltage drop across the object. That gives the equation `v ~ p.v - n.v`, that the voltage of this object is the voltage drop from the positive to the negative pin. Next, there is a current that flows throw our object. Current flow must satisfy conservation of charge, i.e. every electron must be accounted for flowing in and flowing out. This means the current flowing in plus the current flowing out must be equal to zero, or `0 ~ p.i + n.i` is acausal (we don't truly know if the positive pin has a postiive current, but we don't care!). Given this, we give the definition that the current of a given device is the current that flows into the positive pin, i.e. `i ~ p.i`. And that's the equations of our OnePort.
+Wait, I added some extra equations and variables in there, what's going on? Well when we talk about a OnePort object, it is also an object which has a voltage and current state. The voltage of a OnePort like a resistor or capacitor is defined as the voltage drop across the object. That gives the equation `v ~ p.v - n.v`, that the voltage of this object is the voltage drop from the positive to the negative pin. Next, there is a current that flows throw our object. Current flow must satisfy conservation of charge, i.e. every electron must be accounted for flowing in and flowing out. This means the current flowing in plus the current flowing out must be equal to zero, or `0 ~ p.i + n.i` is acausal (we don't truly know if the positive pin has a positive current, but we don't care!). Given this, we give the definition that the current of a given device is the current that flows into the positive pin, i.e. `i ~ p.i`. And that's the equations of our OnePort.
 
 So now see that we have a hierarchy. Our OnePort has a voltage and a current, and it has two pins, and each of those two pins has a voltage and a current, and all of these are related in some intuitive way.
 

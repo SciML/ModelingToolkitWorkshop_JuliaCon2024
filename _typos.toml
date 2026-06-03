@@ -1,0 +1,3 @@
+[default.extend-identifiers]
+# Julia package name appearing in embedded Manifest/Project sections
+Missings = "Missings"

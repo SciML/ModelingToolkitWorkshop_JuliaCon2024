@@ -59,7 +59,7 @@ If we build the system, we will notice something immediately peculiar:
 md"""
 So that's the cartesian pendulum right there, QED. You understand that, right? Okay, there was a big jump there. How did we go from our second order expressions to this set of expressions, and why would we solve this set of equations? Let's look at this step by step. 
 
-Most numerical ODE solvers cannot solve higher order ODE systems, so instead they need to be lowered to first order systems. This is trivially done by defining a new variable that is equal to the derivative, i.e. D(x) = v. This means D(v) = D(D(x)), and thus we can solve the system D(x) = v, D(v) = D(D(x)), substituing the second derivative expression, and get a two variable system that is in first order form. This can be automated via the `ode_order_lowering` method:
+Most numerical ODE solvers cannot solve higher order ODE systems, so instead they need to be lowered to first order systems. This is trivially done by defining a new variable that is equal to the derivative, i.e. D(x) = v. This means D(v) = D(D(x)), and thus we can solve the system D(x) = v, D(v) = D(D(x)), substituting the second derivative expression, and get a two variable system that is in first order form. This can be automated via the `ode_order_lowering` method:
 """
 
 # ╔═╡ 3a003532-1b86-48a6-b439-cd5210e3d4d7
@@ -113,7 +113,7 @@ substitute(det(stepjac), [γ => 0])
 
 # ╔═╡ 9d830db3-d4f6-4e8c-86f4-7f6137973d9a
 md"""
-Okay, that needs some explantion. `stepjac` is the Jacobian of the implicit solver in a general time stepping method. When that method is for example Implicit Euler, then `gamma = dt`, but generally it's some constant times `dt`. The point is, this means that as `dt -> 0`, this has the property that the Jacobain becomes singular, and thus the Newton system is not solvable/convergent as `dt -> 0`. This means that the DAE solver is not generally convergent on these types of equations... oh no!
+Okay, that needs some explanation. `stepjac` is the Jacobian of the implicit solver in a general time stepping method. When that method is for example Implicit Euler, then `gamma = dt`, but generally it's some constant times `dt`. The point is, this means that as `dt -> 0`, this has the property that the Jacobain becomes singular, and thus the Newton system is not solvable/convergent as `dt -> 0`. This means that the DAE solver is not generally convergent on these types of equations... oh no!
 
 It turns out that DAEs can come in many flavors, and these flavors are known as the index of the DAE. An ODE is an index 0 DAE. An index 1 DAE has the property that all algebraic equations have some of the algebraic variables, and that there's a matching of each algebraic equation to a unique algebraic variable. The point here is that remember we have 5 equations:
 """
@@ -210,7 +210,7 @@ plot(loweredsol_doublediff2, idxs = (x, y))
 
 # ╔═╡ 4a2889de-f3fb-4e6e-bc29-eeea247be687
 md"""
-Notice that over time the solution drifts away from having x^2 + y^2 = 1, since we removed that equation! We only have that the second derivative of our constraint is zero, but not that it or its first derivative are zero. So so in order to enforce that our solution truly lives on the manifold, we need to recover these "implicit constraints". When doing so, we need to delete some redundent equations, because now we have 2 more constraint equations, we don't need two of the differntial equations...
+Notice that over time the solution drifts away from having x^2 + y^2 = 1, since we removed that equation! We only have that the second derivative of our constraint is zero, but not that it or its first derivative are zero. So so in order to enforce that our solution truly lives on the manifold, we need to recover these "implicit constraints". When doing so, we need to delete some redundant equations, because now we have 2 more constraint equations, we don't need two of the differential equations...
 
 etc. etc. etc. and so we end up deleting two of the equations and get more constraint equations, which is why a DAE of index 3 adds 2 two constraints and deletes two differential equations that it understands are redundant.
 """

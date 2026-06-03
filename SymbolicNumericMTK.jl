@@ -55,7 +55,7 @@ x / y
 md"""
 In this Pluto notebook we see that Symbolics.jl is setup with pretty printing to Latex, as in it will automatically generate nice representations of the expression, isn't that cool?
 
-As you can see, Symbolic expressions are "lazy", or in other words, it does not act like a traditional programming expression in that it does not evaluate the expression immediately. Instead, it builds a represention of the expression itself for further manipulation. These expressions can be any Julia expression that is symbolically-representable, i.e. things that have a well-defined mathematical representation (so not things like a solution that is solved to a tolerance)
+As you can see, Symbolic expressions are "lazy", or in other words, it does not act like a traditional programming expression in that it does not evaluate the expression immediately. Instead, it builds a representation of the expression itself for further manipulation. These expressions can be any Julia expression that is symbolically-representable, i.e. things that have a well-defined mathematical representation (so not things like a solution that is solved to a tolerance)
 """
 
 # ╔═╡ cd30c22f-a827-4090-9c65-13facb82e2af
@@ -93,7 +93,7 @@ inv(A)
 
 # ╔═╡ adba1f93-9724-48ce-8fd0-c729acbf73f9
 md"""
-I want to note that this requires no special code in Symbolics, instead the existance of the `inv` function in Julia for generic matrices of numbers gives us this functionality!
+I want to note that this requires no special code in Symbolics, instead the existence of the `inv` function in Julia for generic matrices of numbers gives us this functionality!
 
 As a party trick, let's show what happens on an RK4 integrator:
 """
@@ -385,7 +385,7 @@ ss_sol = solve(NonlinearProblem(ssprob))
 
 # ╔═╡ 7bd065bb-67ab-459b-a5f9-0cf454b878b0
 md"""
-Here, the initial value is the guess for the steady state. The steady state is calculated and it's... zero. Rabbits and wolves only at peace when they are all dead. That's a very deep philisophical statement generated for you by symbolic-numerics.
+Here, the initial value is the guess for the steady state. The steady state is calculated and it's... zero. Rabbits and wolves only at peace when they are all dead. That's a very deep philosophical statement generated for you by symbolic-numerics.
 
 There are of course a billion ways to solve the ODE / steady state problem, each with many trade-offs. For example, this method used a Newton method to find the zeros of the system, but you can use dynamic time stepping methods (which would fail on this equation because it oscillates indefinitely), and so on. See the documentation for DifferentialEquations.jl and NonlinearSolve.jl respectively for a full treatment of the numerical solvers.
 

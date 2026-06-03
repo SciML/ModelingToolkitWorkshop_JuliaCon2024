@@ -16,7 +16,7 @@ md"""
 
 Now we are deep into ModelingToolkit. We have learned that we can just write out equations, but in general building our model using reusable physical components instead requires acausal modeling, and acausal modeling gives us DAEs. We learned that DAE systems can be rather complicated in terms of how they must be specified in order to be solved, but ModelingToolkit has a deep simplification engine that transforms the equations into a solvable form.
 
-But if I don't even know what my equations or state variables are going to be because MTK can just delete some at will... how do I specify my initial conditions? This is called the initializaiton problem in DAEs, and it's a surprisingly deep topic.
+But if I don't even know what my equations or state variables are going to be because MTK can just delete some at will... how do I specify my initial conditions? This is called the initialization problem in DAEs, and it's a surprisingly deep topic.
 
 In the context of ODEs, there is no such thing as an initialization step. You give an initial condition, and that is that. Your initial condition is almighty, the solver just uses it. But now let's consider a DAE:
 """
@@ -85,7 +85,7 @@ plot(sol2, idxs = (x, y))
 
 # ╔═╡ c29dd6c5-f77c-4c00-9309-7131a55e0f9f
 md"""
-It's the same thing! ModelingToolkit's intiailization system auto-magically builds a system that re-translates the given set of initial conditions into the variables it knows the solver needs. This means you don't need to worry about giving "the right variables", just any consistent set. We can also do more advanced things, like make an initial condition dependent on a parameter or expression:
+It's the same thing! ModelingToolkit's initialization system auto-magically builds a system that re-translates the given set of initial conditions into the variables it knows the solver needs. This means you don't need to worry about giving "the right variables", just any consistent set. We can also do more advanced things, like make an initial condition dependent on a parameter or expression:
 """
 
 # ╔═╡ 09be6705-d96b-4476-8158-20711f80c533
@@ -93,7 +93,7 @@ sol3 = solve(ODEProblem(pend, [x => 1, D(y) => g], (0.0, 1.5), [g => 1], guesses
 
 # ╔═╡ f6ea7b24-494e-489e-b58b-6296c2226376
 md"""
-You can initialize the derivatives of variables to be values, and create custom equations to be satisfied. There's lots of flexability in what is allowed.
+You can initialize the derivatives of variables to be values, and create custom equations to be satisfied. There's lots of flexibility in what is allowed.
 
 But what happens if we have an incorrect number of conditions? MTK will warn you about that scenario and do a smart thing.
 """
@@ -157,7 +157,7 @@ isys = generate_initializesystem(pend, u0map = [x => 1.0, y => 0.0], guesses = [
 
 # ╔═╡ a2ad0ca2-581f-432c-b7f3-bc0aba03012b
 md"""
-You can use this in order to investgate why you have so many/few quesitons, and what equations are missing. Note that if you want to simplify a over/underdetermined system, you need to specify the simplification with `fully_determined=false`:
+You can use this in order to investgate why you have so many/few questions, and what equations are missing. Note that if you want to simplify a over/underdetermined system, you need to specify the simplification with `fully_determined=false`:
 """
 
 # ╔═╡ c8d250ea-f065-4502-b61d-e91d5b22b37e
